@@ -23,7 +23,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var titleInput: EditText
     private lateinit var contentInput: EditText
     private lateinit var testBtn: Button
-    private lateinit var settingsBtn: Button
+    private lateinit var settingsBtn: ImageButton
     private lateinit var notificationAccessBtn: Button
     private lateinit var resultView: TextView
     private lateinit var selectCalendarBtn: Button

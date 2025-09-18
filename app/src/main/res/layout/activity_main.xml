@@ -1,116 +1,207 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <LinearLayout
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
+        android:layout_height="match_parent">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="模拟通知测试"
-            android:textSize="18sp" />
-
-        <EditText
-            android:id="@+id/edit_test_title"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:hint="测试通知标题"
-            android:inputType="text" />
+            android:orientation="vertical"
+            android:padding="16dp">
 
-        <EditText
-            android:id="@+id/edit_test_content"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:hint="测试通知正文"
-            android:minLines="3"
-            android:gravity="top"
-            android:inputType="textMultiLine" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="模拟通知测试"
+                android:textSize="18sp" />
 
-        <Button
-            android:id="@+id/btn_test_parse"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="模拟解析并创建事件" />
+            <EditText
+                android:id="@+id/edit_test_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:hint="测试通知标题"
+                android:inputType="text" />
 
-        <Button
-            android:id="@+id/btn_open_notification_access_main"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="打开通知访问设置" />
+            <EditText
+                android:id="@+id/edit_test_content"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:hint="测试通知正文"
+                android:minLines="3"
+                android:gravity="top"
+                android:inputType="textMultiLine" />
 
-        <Button
-            android:id="@+id/btn_open_notification_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="调试通知捕获" />
+            <!-- 模拟解析并创建事件 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="8dp"
+                    android:src="@drawable/event_24" />
+                <Button
+                    android:id="@+id/btn_test_parse"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="模拟解析并创建事件" />
+            </LinearLayout>
 
-        <Button
-            android:id="@+id/btn_refresh_notification_service"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="刷新通知监听服务" />
+            <!-- 打开通知访问设置 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="8dp"
+                    android:src="@drawable/notifications_24" />
+                <Button
+                    android:id="@+id/btn_open_notification_access_main"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="打开通知访问设置" />
+            </LinearLayout>
 
-        <Button
-            android:id="@+id/btn_battery_optimization"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="请求忽略电池优化" />
+            <!-- 调试通知捕获 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="8dp"
+                    android:src="@drawable/bug_report_24" />
+                <Button
+                    android:id="@+id/btn_open_notification_status"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="调试通知捕获" />
+            </LinearLayout>
 
-        <Button
-            android:id="@+id/btn_select_calendar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="选择日历" />
+            <!-- 刷新通知监听服务 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="8dp"
+                    android:src="@drawable/refresh_24" />
+                <Button
+                    android:id="@+id/btn_refresh_notification_service"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="刷新通知监听服务" />
+            </LinearLayout>
 
-        <TextView
-            android:id="@+id/text_calendar_selected"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="未选择日历" />
+            <!-- 请求忽略电池优化 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="8dp"
+                    android:src="@drawable/battery_saver_24" />
+                <Button
+                    android:id="@+id/btn_battery_optimization"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="请求忽略电池优化" />
+            </LinearLayout>
 
-        <Switch
-            android:id="@+id/switch_keep_alive"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="后台保持运行" />
+            <!-- 选择日历 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="8dp"
+                    android:src="@drawable/calendar_month_24" />
+                <Button
+                    android:id="@+id/btn_select_calendar"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="选择日历" />
+            </LinearLayout>
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="结果日志" />
+            <TextView
+                android:id="@+id/text_calendar_selected"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="未选择日历" />
 
-        <TextView
-            android:id="@+id/text_result"
-            android:layout_width="match_parent"
-            android:layout_height="200dp"
-            android:layout_marginTop="8dp"
-            android:padding="12dp"
-            android:scrollbars="vertical"
-            android:textSize="12sp" />
+            <Switch
+                android:id="@+id/switch_keep_alive"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="后台保持运行" />
 
-        <Button
-            android:id="@+id/btn_open_settings"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="打开设置" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="结果日志" />
 
-    </LinearLayout>
+            <TextView
+                android:id="@+id/text_result"
+                android:layout_width="match_parent"
+                android:layout_height="200dp"
+                android:layout_marginTop="8dp"
+                android:padding="12dp"
+                android:scrollbars="vertical"
+                android:textSize="12sp" />
 
- </ScrollView>
+            <!-- 原“打开设置”按钮已替换为悬浮 FAB -->
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- 右下角悬浮设置按钮（FAB） -->
+    <ImageButton
+        android:id="@+id/btn_open_settings"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="16dp"
+        android:background="@drawable/fab_bg"
+        android:src="@drawable/build_24"
+        android:contentDescription="打开设置"
+        android:padding="16dp"
+        android:elevation="6dp" />
+
+</FrameLayout>
