@@ -104,6 +104,32 @@ object DateTimeParser {
         return null
     }
 
+    // Overload: allow passing a fixed baseMillis so all calculations in this call share the same "now"
+    fun parseDateTime(context: android.content.Context, sentence: String, baseMillis: Long): ParseResult? {
+        // Prefer explicit rule-based parsing first (handles tokens like 周五/本周五 reliably).
+        try {
+            val rule = RuleBasedStrategyWithContext(context)
+            val r = rule.tryParseWithBase(sentence, baseMillis)
+            if (r != null) return r
+        } catch (e: Exception) {
+            Log.w(TAG, "RuleBaseCtx(withBase) failed: ${e.message}")
+            try { NotificationUtils.sendError(context, e) } catch (_: Throwable) {}
+        }
+
+        // Fallback to TimeNLP only if enabled and rule-based didn't match
+        if (SettingsStore.isTimeNLPEnabled(context)) {
+            try {
+                val nlp = TimeNLPStrategy(context)
+                val r2 = nlp.tryParseWithBase(sentence, baseMillis)
+                if (r2 != null) return r2
+            } catch (e: Exception) {
+                Log.w(TAG, "TimeNLP(withBase) failed: ${e.message}")
+                try { NotificationUtils.sendError(context, e) } catch (_: Throwable) {}
+            }
+        }
+        return null
+    }
+
     // === Strategy interfaces ===
     private interface ParsingStrategy {
         fun name(): String
@@ -115,6 +141,13 @@ object DateTimeParser {
         override fun name() = "TimeNLP"
         override fun tryParse(sentence: String): ParseResult? {
             val slots = TimeNLPAdapter.parse(context, sentence)
+            if (slots.isEmpty()) return null
+            val s = slots.first()
+            val (t, loc) = extractTitleAndLocation(sentence)
+            return ParseResult(s.startMillis, s.endMillis, t, loc)
+        }
+        fun tryParseWithBase(sentence: String, baseMillis: Long): ParseResult? {
+            val slots = TimeNLPAdapter.parse(context, sentence, baseMillis)
             if (slots.isEmpty()) return null
             val s = slots.first()
             val (t, loc) = extractTitleAndLocation(sentence)
@@ -135,6 +168,10 @@ object DateTimeParser {
         override fun tryParse(sentence: String): ParseResult? {
             val map = buildRelativeTokenMap(ctx)
             return parseDateTimeInternal(sentence, null, map)
+        }
+        fun tryParseWithBase(sentence: String, baseMillis: Long): ParseResult? {
+            val map = buildRelativeTokenMap(ctx)
+            return parseDateTimeInternal(sentence, null, map, baseMillis)
         }
     }
 
@@ -177,10 +214,22 @@ object DateTimeParser {
         return map
     }
 
-    private fun parseDateTimeInternal(sentence: String, relativePattern: Pattern?, relativeMap: LinkedHashMap<String, RelativeSpec>? = null): ParseResult? {
+    // Create Calendar with optional fixed base time
+    private fun newCal(baseMillis: Long?): Calendar {
+        val c = Calendar.getInstance()
+        if (baseMillis != null) c.timeInMillis = baseMillis
+        return c
+    }
+
+    private fun parseDateTimeInternal(
+        sentence: String,
+        relativePattern: Pattern?,
+        relativeMap: LinkedHashMap<String, RelativeSpec>? = null,
+        baseMillis: Long? = null
+    ): ParseResult? {
         Log.d(TAG, "parseDateTimeInternal - input: '$sentence'")
         try {
-            val now = Calendar.getInstance()
+            val now = newCal(baseMillis)
 
             // Chaoxing style countdown: 还有24个小时 / 还有2天3小时 / 还有90分钟 / 还有1天2小时30分钟5秒
             // Use a simple, balanced regex to quickly detect countdown phrases (we parse units sequentially below).
@@ -211,7 +260,7 @@ object DateTimeParser {
                 // 还有24个小时 -> days=0 hours=24
                 if (days + hours + minutes + seconds > 0) {
                     Log.d(TAG, "countdown detected: days=$days hours=$hours minutes=$minutes seconds=$seconds")
-                    val deadline = Calendar.getInstance().apply {
+                    val deadline = newCal(baseMillis).apply {
                         add(Calendar.DAY_OF_MONTH, days)
                         add(Calendar.HOUR_OF_DAY, hours)
                         add(Calendar.MINUTE, minutes)
@@ -285,14 +334,14 @@ object DateTimeParser {
                 val startDay = toArabic(range.group(2))
                 val endMonth = toArabic(range.group(3))
                 val endDay = toArabic(range.group(4))
-                val startCal = Calendar.getInstance()
+                val startCal = newCal(baseMillis)
                 startCal.set(Calendar.MONTH, startMonth - 1)
                 startCal.set(Calendar.DAY_OF_MONTH, startDay)
                 startCal.set(Calendar.HOUR_OF_DAY, 9)
                 startCal.set(Calendar.MINUTE, 0)
                 startCal.set(Calendar.SECOND, 0)
 
-                val endCal = Calendar.getInstance()
+                val endCal = newCal(baseMillis)
                 endCal.set(Calendar.MONTH, endMonth - 1)
                 endCal.set(Calendar.DAY_OF_MONTH, endDay)
                 endCal.set(Calendar.HOUR_OF_DAY, 17)
@@ -309,7 +358,7 @@ object DateTimeParser {
             if (m.find()) {
                 val month = toArabic(m.group(1))
                 val day = toArabic(m.group(2))
-                val cal = Calendar.getInstance()
+                val cal = newCal(baseMillis)
                 cal.set(Calendar.MONTH, month - 1)
                 cal.set(Calendar.DAY_OF_MONTH, day)
                 // default time if none
@@ -344,7 +393,7 @@ object DateTimeParser {
                     val minute = minuteStr?.toIntOrNull() ?: 0
                     val dayOfWeek = parseWeekday(dayToken)
                     if (dayOfWeek != null) {
-                        val next = nextWeekdayInCalendar(dayOfWeek)
+                        val next = nextWeekdayInCalendar(dayOfWeek, baseMillis)
                         next.set(Calendar.HOUR_OF_DAY, hour)
                         next.set(Calendar.MINUTE, minute)
                         next.set(Calendar.SECOND, 0)
@@ -367,7 +416,7 @@ object DateTimeParser {
                 val hour = hourStr?.let { if (it.matches(Regex("\\d+"))) it.toInt() else toArabic(it) } ?: continue
                 if (!hasIndicator || hour !in 0..23) continue
                 val minute = minStr?.toIntOrNull() ?: 0
-                val cal = Calendar.getInstance()
+                val cal = newCal(baseMillis)
                 cal.set(Calendar.HOUR_OF_DAY, adjustHourByAmPm(hour, ampm))
                 cal.set(Calendar.MINUTE, minute)
                 cal.set(Calendar.SECOND, 0)
@@ -382,7 +431,7 @@ object DateTimeParser {
                 val matched = relativeMap.keys.firstOrNull { sentence.contains(it) }
                 if (matched != null) {
                     val spec = relativeMap[matched]!!
-                    val cal = Calendar.getInstance()
+                    val cal = newCal(baseMillis)
                     cal.add(Calendar.DAY_OF_MONTH, spec.offsetDays)
                     // find explicit time; if none use default 9:00 or 19:00 for pm tokens
                     val t2 = timePattern.matcher(sentence)
@@ -421,7 +470,7 @@ object DateTimeParser {
 
             // 6) 本周/下周 family
             if (sentence.contains("下周") || sentence.contains("本周") || sentence.contains("这周")) {
-                val weekCal = Calendar.getInstance()
+                val weekCal = newCal(baseMillis)
                 val isNext = sentence.contains("下周")
                 val isThis = sentence.contains("本周") || sentence.contains("这周")
                 // move to Monday of target week
@@ -478,20 +527,22 @@ object DateTimeParser {
 
     private fun parseWeekday(sentence: String?): Int? {
         if (sentence == null) return null
+        val s = sentence
         return when {
-            sentence.contains("周一") -> Calendar.MONDAY
-            sentence.contains("周二") -> Calendar.TUESDAY
-            sentence.contains("周三") -> Calendar.WEDNESDAY
-            sentence.contains("周四") -> Calendar.THURSDAY
-            sentence.contains("周五") -> Calendar.FRIDAY
-            sentence.contains("周六") -> Calendar.SATURDAY
-            sentence.contains("周日") || sentence.contains("周天") -> Calendar.SUNDAY
+            s.contains("周一") || s.contains("星期一") -> Calendar.MONDAY
+            s.contains("周二") || s.contains("星期二") -> Calendar.TUESDAY
+            s.contains("周三") || s.contains("星期三") -> Calendar.WEDNESDAY
+            s.contains("周四") || s.contains("星期四") -> Calendar.THURSDAY
+            s.contains("周五") || s.contains("星期五") -> Calendar.FRIDAY
+            s.contains("周六") || s.contains("星期六") -> Calendar.SATURDAY
+            s.contains("周日") || s.contains("周天") || s.contains("星期日") || s.contains("星期天") -> Calendar.SUNDAY
             else -> null
         }
     }
 
-    private fun nextWeekdayInCalendar(targetWeekday: Int): Calendar {
+    private fun nextWeekdayInCalendar(targetWeekday: Int, baseMillis: Long? = null): Calendar {
         val cal = Calendar.getInstance()
+        if (baseMillis != null) cal.timeInMillis = baseMillis
         val today = cal.get(Calendar.DAY_OF_WEEK)
         var diff = targetWeekday - today
         if (diff <= 0) diff += 7

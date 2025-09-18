@@ -733,6 +733,15 @@ class DateTimeParserTest {
         assertEquals(9, cal.get(Calendar.HOUR_OF_DAY))
         assertEquals(5, cal.get(Calendar.MINUTE))
     }
+    
+    @Test
+    fun testIM_TomorrowAfternoon6() {
+        val slots = parseSlots("明天下午6点开会")
+        assertNotNull(slots.firstOrNull())
+        val cal = Calendar.getInstance().apply { timeInMillis = slots.first().startMillis }
+        assertEquals(17, cal.get(Calendar.DAY_OF_MONTH))
+        assertEquals(18, cal.get(Calendar.HOUR_OF_DAY))
+    }
 
     @Test
     fun testIM_DotDateNoSpaceJoin() {

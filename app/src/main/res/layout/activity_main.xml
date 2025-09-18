@@ -164,12 +164,24 @@
                 android:layout_marginTop="4dp"
                 android:text="未选择日历" />
 
-            <Switch
-                android:id="@+id/switch_keep_alive"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="后台保持运行" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginEnd="8dp"
+                    android:src="@drawable/tab_inactive_24" />
+                <Switch
+                    android:id="@+id/switch_keep_alive"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="后台保持运行" />
+            </LinearLayout>
 
             <TextView
                 android:layout_width="wrap_content"

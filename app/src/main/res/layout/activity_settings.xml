@@ -56,62 +56,136 @@
         android:layout_height="wrap_content"
         android:inputType="text" />
 
+    <!-- 规则模板按钮（带左侧图标） -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingTop="4dp">
+        android:paddingTop="4dp"
+        android:gravity="center_vertical">
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="8dp"
+            android:src="@drawable/rule_24" />
         <Button
             android:id="@+id/btn_fill_rule_template"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:text="规则模板"/>
-        <View
-            android:layout_width="12dp"
-            android:layout_height="match_parent"/>
+    </LinearLayout>
+
+    <!-- 重置日期词按钮（带左侧图标） -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingTop="4dp"
+        android:gravity="center_vertical">
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="8dp"
+            android:src="@drawable/restart_alt_24" />
         <Button
             android:id="@+id/btn_reset_relative_words"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:text="重置日期词"/>
     </LinearLayout>
 
-    <Button
-        android:id="@+id/btn_save"
-        android:layout_width="wrap_content"
+    <!-- 保存配置（带左侧图标） -->
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="保存配置"
-        android:textAllCaps="false" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="8dp"
+            android:src="@drawable/save_24" />
+        <Button
+            android:id="@+id/btn_save"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="保存配置"
+            android:textAllCaps="false"
+            android:backgroundTint="@color/md_theme_primary"
+            android:textColor="@color/md_theme_onPrimary" />
+    </LinearLayout>
 
     <View
         android:layout_width="match_parent"
         android:layout_height="8dp" />
 
-    <Button
-        android:id="@+id/btn_request_permission"
-        android:layout_width="wrap_content"
+    <!-- 请求日历权限（带左侧图标） -->
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="请求日历权限" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="8dp"
+            android:src="@drawable/event_available_24" />
+        <Button
+            android:id="@+id/btn_request_permission"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="请求日历权限" />
+    </LinearLayout>
 
     <View
         android:layout_width="match_parent"
         android:layout_height="8dp" />
 
-    <Button
-        android:id="@+id/btn_open_notification_access"
-        android:layout_width="wrap_content"
+    <!-- 打开通知访问设置（带左侧图标） -->
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="打开通知访问设置" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="8dp"
+            android:src="@drawable/notifications_active_24" />
+        <Button
+            android:id="@+id/btn_open_notification_access"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="打开通知访问设置" />
+    </LinearLayout>
 
     <View
         android:layout_width="match_parent"
         android:layout_height="8dp" />
 
-    <Button
-        android:id="@+id/btn_select_apps"
-        android:layout_width="wrap_content"
+    <!-- 选择来源应用（带左侧图标） -->
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="选择来源应用(多选)" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="8dp"
+            android:src="@drawable/apps_24" />
+        <Button
+            android:id="@+id/btn_select_apps"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="选择来源应用(多选)" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/text_selected_apps"

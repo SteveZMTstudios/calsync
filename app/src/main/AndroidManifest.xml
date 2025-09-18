@@ -58,7 +58,7 @@
 
         <activity android:name="top.stevezmt.calsync.NotificationStatusActivity"
             android:exported="true"
-            android:label="Notification Status" />
+            android:label="通知侦听器测试" />
 
         <service
             android:name="top.stevezmt.calsync.KeepAliveService"

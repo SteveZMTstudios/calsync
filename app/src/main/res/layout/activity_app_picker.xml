@@ -24,9 +24,23 @@
         android:layout_height="wrap_content"
         android:text="包含系统/无图标应用"/>
 
-    <Button
-        android:id="@+id/btn_save_selection"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="保存"/>
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="8dp"
+            android:src="@drawable/save_24"/>
+        <Button
+            android:id="@+id/btn_save_selection"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="保存"
+            android:backgroundTint="@color/md_theme_primary"
+            android:textColor="@color/md_theme_onPrimary"/>
+    </LinearLayout>
 </LinearLayout>

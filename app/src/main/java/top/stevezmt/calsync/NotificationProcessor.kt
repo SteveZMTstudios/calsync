@@ -31,6 +31,8 @@ object NotificationProcessor {
 	 */
 	fun process(context: Context, input: ProcessInput, notifier: ConfirmationNotifier): ProcessResult {
 		return try {
+			// Capture a single 'now' for this processing run to ensure consistent relative parsing
+			val baseMillis = System.currentTimeMillis()
 			val keywords = SettingsStore.getKeywords(context)
 			val matchesKeyword = keywords.any { kw ->
 				input.title.contains(kw, true) || input.content.contains(kw, true)
@@ -48,9 +50,9 @@ object NotificationProcessor {
 			var anyCreated = false
 			var lastEventId: Long? = null
 			var lastReason: String? = null
-			for (sentence in sentences) {
+				for (sentence in sentences) {
 				try {
-					val parsed = DateTimeParser.parseDateTime(context, sentence)
+						val parsed = DateTimeParser.parseDateTime(context, sentence, baseMillis)
 					if (parsed == null) { lastReason = "解析失败($sentence)"; continue }
 
 					val eventTitle = parsed.title?.takeIf { it.isNotBlank() } ?: run {
