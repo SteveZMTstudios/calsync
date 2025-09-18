@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="12dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="选择要监听的通知来源应用 (多选)"/>
+
+    <ListView
+        android:id="@+id/list_apps"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:choiceMode="multipleChoice"
+        android:listSelector="@android:color/holo_blue_light"/>
+
+    <CheckBox
+        android:id="@+id/cb_show_all"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="包含系统/无图标应用"/>
+
+    <Button
+        android:id="@+id/btn_save_selection"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="保存"/>
+</LinearLayout>

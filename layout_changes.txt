@@ -1,0 +1,27 @@
+以下是需要添加到布局文件的按钮：
+
+在 `activity_main.xml` 文件中，添加两个新按钮：
+
+```xml
+<!-- 添加在其他按钮之后，例如 btn_open_notification_access_main 之后 -->
+
+<Button
+    android:id="@+id/btn_refresh_notification_service"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="刷新通知监听服务"
+    android:layout_marginTop="8dp"
+    android:layout_marginStart="16dp"
+    android:layout_marginEnd="16dp" />
+
+<Button
+    android:id="@+id/btn_battery_optimization"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:text="请求忽略电池优化"
+    android:layout_marginTop="8dp"
+    android:layout_marginStart="16dp"
+    android:layout_marginEnd="16dp" />
+```
+
+请根据您的布局结构添加这些按钮。如果您使用的是 ConstraintLayout，则需要添加约束条件以正确定位这些按钮。

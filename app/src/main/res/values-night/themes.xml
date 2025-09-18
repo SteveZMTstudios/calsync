@@ -1,0 +1,11 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Basic AppCompat night theme with ActionBar -->
+    <style name="Theme.通知日历同步" parent="Theme.AppCompat.DayNight.DarkActionBar">
+        <item name="colorPrimary">@color/purple_200</item>
+        <item name="colorPrimaryDark">@color/purple_700</item>
+        <item name="colorAccent">@color/teal_200</item>
+        <item name="android:statusBarColor">@color/purple_700</item>
+        <!-- Dark status bar icons for dark theme -->
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

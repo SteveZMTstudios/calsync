@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <Button
+        android:id="@+id/btnOpenListenerSettings"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="打开通知监听设置" />
+
+    <Button
+        android:id="@+id/btnOpenAppNotification"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="打开应用通知设置"
+        android:layout_marginTop="8dp" />
+
+    <Button
+        android:id="@+id/btnSendTest"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="发送测试通知"
+        android:layout_marginTop="8dp" />
+
+    <Button
+        android:id="@+id/btnCrashTest"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="制造崩溃 (测试)"
+        android:layout_marginTop="8dp" />
+
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="12dp"
+        android:background="#11000000"
+        android:padding="8dp"
+        android:textSize="12sp" />
+
+</LinearLayout>

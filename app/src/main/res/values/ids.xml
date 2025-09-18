@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tag id used to store original top padding on views so we don't accumulate padding -->
+    <item name="original_top_padding" type="id"/>
+</resources>

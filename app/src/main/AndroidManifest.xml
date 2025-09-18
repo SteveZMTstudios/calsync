@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"
+        tools:ignore="ForegroundServicesPolicy" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- 用于在设备上查询所有已安装的包（使 AppPicker 可以列出非 Launcher 应用）。
+        注意：在 Google Play 上发布的应用若使用该权限可能需要声明并符合政策，
+        建议仅在内部或受控分发场景使用，或在发布到 Play 前改为使用更有针对性的查询（如通过 Intent 查询或请求用户手动输入包名）。 -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="PackageVisibilityPolicy,QueryAllPackagesPermission" />
+
+    <!-- Debugging permission removed: debug receiver is disabled (non-exported) for safety. -->
+
+    <application
+        android:name=".CalSyncApp"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.通知日历同步">
+
+        <!-- Notification listener service for capturing notifications and creating calendar events -->
+        <service
+            android:name="top.stevezmt.calsync.NotificationMonitorService"
+            android:enabled="true"
+            android:exported="false"
+            android:label="Notification Monitor"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <activity android:name="top.stevezmt.calsync.SettingsActivity"
+            android:exported="true"
+            android:label="设置">
+        </activity>
+
+        <activity android:name="top.stevezmt.calsync.AppPickerActivity" android:exported="false" android:label="选择应用" />
+
+        <activity android:name="top.stevezmt.calsync.MainActivity"
+            android:exported="true"
+            android:label="通知日历同步">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name="top.stevezmt.calsync.NotificationStatusActivity"
+            android:exported="true"
+            android:label="Notification Status" />
+
+        <service
+            android:name="top.stevezmt.calsync.KeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+
+
+        <!-- EventActionReceiver is internal-only; keep it non-exported so external apps cannot send broadcasts. -->
+        <receiver android:name="top.stevezmt.calsync.EventActionReceiver" android:exported="false" />
+
+    <!-- Receiver to support copy-to-clipboard action from error notifications -->
+    <receiver android:name="top.stevezmt.calsync.ErrorNotificationReceiver" android:exported="false" />
+
+        <!-- Crash notifier runs in a separate lightweight process so the notification can be posted
+             even if the main app process just crashed. It is not exported. -->
+        <receiver
+            android:name="top.stevezmt.calsync.CrashNotifierReceiver"
+            android:exported="false"
+            android:process=":crashhelper">
+            <intent-filter>
+                <action android:name="top.stevezmt.calsync.ACTION_SHOW_CRASH" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Debug receiver disabled (non-exported) for safety. -->
+        <receiver android:name="top.stevezmt.calsync.DebugCommandReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="top.stevezmt.calsync.ACTION_DUMP_ACTIVE_NOTIFS" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

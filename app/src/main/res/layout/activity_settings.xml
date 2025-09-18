@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:orientation="vertical"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp">
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="触发器关键字，以逗号分隔" />
+
+    <EditText
+        android:id="@+id/edit_keywords"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="text" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@android:color/darker_gray"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="12dp"/>
+        
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="以下内容通常不需要调整，否则可能导致匹配器出错" />
+    
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="日期词（相对,用逗号分隔）" />
+
+    <EditText
+        android:id="@+id/edit_relative_words"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="text" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="自定义匹配规则(正则，多条用逗号分隔)" />
+
+    <EditText
+        android:id="@+id/edit_custom_rules"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="text" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingTop="4dp">
+        <Button
+            android:id="@+id/btn_fill_rule_template"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="规则模板"/>
+        <View
+            android:layout_width="12dp"
+            android:layout_height="match_parent"/>
+        <Button
+            android:id="@+id/btn_reset_relative_words"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="重置日期词"/>
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/btn_save"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="保存配置"
+        android:textAllCaps="false" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="8dp" />
+
+    <Button
+        android:id="@+id/btn_request_permission"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="请求日历权限" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="8dp" />
+
+    <Button
+        android:id="@+id/btn_open_notification_access"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="打开通知访问设置" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="8dp" />
+
+    <Button
+        android:id="@+id/btn_select_apps"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="选择来源应用(多选)" />
+
+    <TextView
+        android:id="@+id/text_selected_apps"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="未选择(默认全部)"
+        android:paddingTop="4dp"/>
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>
