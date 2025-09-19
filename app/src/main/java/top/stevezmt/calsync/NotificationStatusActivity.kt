@@ -18,6 +18,9 @@ class NotificationStatusActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_notification_status)
+
+        // Enable back button in action bar
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
         statusView = findViewById(R.id.statusText)
         statusView.movementMethod = ScrollingMovementMethod()
 
@@ -116,6 +119,16 @@ class NotificationStatusActivity : AppCompatActivity() {
             return flat.split(':').any { it.equals(meFlat, ignoreCase = true) }
         } catch (e: Exception) {
             return false
+        }
+    }
+
+    override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
+        return when (item.itemId) {
+            android.R.id.home -> {
+                finish()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
         }
     }
 }

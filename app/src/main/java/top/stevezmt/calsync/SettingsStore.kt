@@ -15,6 +15,7 @@ object SettingsStore {
     private const val KEY_SELECTED_APP_PKGS = "selected_app_pkgs" // comma separated list
     private const val KEY_SELECTED_APP_NAMES = "selected_app_names" // comma separated list parallel to pkgs
     private const val KEY_ENABLE_TIMENLP = "enable_timenlp"
+    private const val KEY_PREFER_FUTURE = "prefer_future_option" // 0=auto,1=prefer future,2=disable
 
     fun getKeywords(context: Context): List<String> {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -56,6 +57,28 @@ object SettingsStore {
     fun isTimeNLPEnabled(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return prefs.getBoolean(KEY_ENABLE_TIMENLP, true)
+    }
+
+    // preferFuture option: tri-state
+    // 0 = Auto (let parser decide), 1 = Prefer future, 2 = Disable prefer future
+    fun getPreferFutureOption(context: Context): Int {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getInt(KEY_PREFER_FUTURE, 1) // default to 1 -> prefer future
+    }
+
+    fun setPreferFutureOption(context: Context, option: Int) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs.edit().putInt(KEY_PREFER_FUTURE, option).apply()
+    }
+
+    // Helper: returns nullable Boolean: null = Auto, true = prefer future, false = disable
+    fun getPreferFutureBoolean(context: Context): Boolean? {
+        return when (getPreferFutureOption(context)) {
+            0 -> null
+            1 -> true
+            2 -> false
+            else -> true
+        }
     }
 
     fun setTimeNLPEnabled(context: Context, enabled: Boolean) {

@@ -20,6 +20,38 @@
         android:layout_height="wrap_content"
         android:inputType="text" />
 
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="时间解析偏好" />
+
+    <RadioGroup
+        android:id="@+id/radio_prefer_future"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <RadioButton
+            android:id="@+id/radio_auto"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="自动（尝试判断）" />
+
+        <RadioButton
+            android:id="@+id/radio_prefer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="偏向按未来计算" />
+
+        <RadioButton
+            android:id="@+id/radio_disable"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="不偏向未来计算" />
+
+    </RadioGroup>
+
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
@@ -36,7 +68,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:text="日期词（相对,用逗号分隔）" />
+        android:text="日期词（当存在独有表述时调整,用逗号分隔）" />
 
     <EditText
         android:id="@+id/edit_relative_words"
@@ -48,7 +80,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:text="自定义匹配规则(正则，多条用逗号分隔)" />
+        android:text="日期匹配规则(正则，多条用逗号分隔)" />
 
     <EditText
         android:id="@+id/edit_custom_rules"

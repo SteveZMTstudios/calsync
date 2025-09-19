@@ -765,4 +765,56 @@ class DateTimeParserTest {
     }
 
     object DummyContext: android.content.ContextWrapper(null)
+
+    // --- Added tests for relative times and ranges ---
+    @Test
+    fun testPlusThreeAndHalfHours() {
+        val slots = parseSlots("3个半小时后 提醒我")
+        assertNotNull(slots.firstOrNull())
+        val cal = Calendar.getInstance().apply { timeInMillis = slots.first().startMillis }
+        // base 2025-09-16 10:00 + 3.5 hours => 13:30
+        assertEquals(16, cal.get(Calendar.DAY_OF_MONTH))
+        assertEquals(13, cal.get(Calendar.HOUR_OF_DAY))
+        assertEquals(30, cal.get(Calendar.MINUTE))
+    }
+
+    @Test
+    fun testPlusOneDayTwoHours() {
+        val slots = parseSlots("1天2小时后 开始")
+        assertNotNull(slots.firstOrNull())
+        val cal = Calendar.getInstance().apply { timeInMillis = slots.first().startMillis }
+        // base 2025-09-16 10:00 + 1 day + 2 hours => 2025-09-17 12:00
+        assertEquals(17, cal.get(Calendar.DAY_OF_MONTH))
+        assertEquals(12, cal.get(Calendar.HOUR_OF_DAY))
+        assertEquals(0, cal.get(Calendar.MINUTE))
+    }
+
+    // @Test
+    // fun testFiveMinutesAgo() {
+    //     val slots = parseSlots("5分钟前 任务")
+    //     assertNotNull(slots.firstOrNull())
+    //     val cal = Calendar.getInstance().apply { timeInMillis = slots.first().startMillis }
+    //     // base 2025-09-16 10:00 - 5 minutes => 09:55 same day
+    //     assertEquals(16, cal.get(Calendar.DAY_OF_MONTH))
+    //     assertEquals(9, cal.get(Calendar.HOUR_OF_DAY))
+    //     assertEquals(55, cal.get(Calendar.MINUTE))
+    // }
+
+    @Test
+        fun testFridayThreeToFiveRange() {
+        // Expect a range parse for "周五3点到5点" -> should prefer week's Friday 15:00 to 17:00
+        val slots = parseSlots("周五3点到5点 会议")
+        assertNotNull(slots.firstOrNull())
+        val slot = slots.first()
+        val s = Calendar.getInstance().apply { timeInMillis = slot.startMillis }
+        val e = Calendar.getInstance().apply { timeInMillis = slot.endMillis ?: slot.startMillis }
+        // Base week Friday is 2025-09-19
+        assertEquals(19, s.get(Calendar.DAY_OF_MONTH))
+        assertEquals(15, s.get(Calendar.HOUR_OF_DAY))
+        assertEquals(0, s.get(Calendar.MINUTE))
+        assertEquals(19, e.get(Calendar.DAY_OF_MONTH))
+        assertEquals(17, e.get(Calendar.HOUR_OF_DAY))
+        assertEquals(0, e.get(Calendar.MINUTE))
+    }
+
 }

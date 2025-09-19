@@ -107,17 +107,31 @@ public class TimeUnit {
         else if (s.contains("后天")) contextCal.add(Calendar.DAY_OF_MONTH,2);
         else if (s.contains("昨天")) contextCal.add(Calendar.DAY_OF_MONTH,-1);
 
-    // relative durations like X天/小时/分钟/秒后
-    // extract numbers (Chinese or Arabic) and accumulate to contextCal
-    Matcher dm = Pattern.compile("([一二三四五六七八九十百零0-9]+)(?:个)?天后").matcher(s);
-    if (dm.find()) contextCal.add(Calendar.DAY_OF_MONTH, parseChineseOrArabic(dm.group(1)));
-    dm = Pattern.compile("([一二三四五六七八九十百零0-9]+)(?:个)?小时后").matcher(s);
-    if (dm.find()) contextCal.add(Calendar.HOUR_OF_DAY, parseChineseOrArabic(dm.group(1)));
-    dm = Pattern.compile("([一二三四五六七八九十百零0-9]+)(?:个)?分(?:钟)?后").matcher(s);
-    if (dm.find()) contextCal.add(Calendar.MINUTE, parseChineseOrArabic(dm.group(1)));
-        dm = Pattern.compile("([一二三四五六七八九十百零0-9]+)(?:个)?秒后").matcher(s);
-        if (dm.find()) contextCal.add(Calendar.SECOND, parseChineseOrArabic(dm.group(1)));
-        // If any of above matched and no explicit time set, take hour/minute from updated context
+        // relative durations like X天/小时/分钟/秒后, include half-hour handling
+        // handle patterns like '3个半小时后' first
+        Matcher dm = Pattern.compile("([一二三四五六七八九十百零0-9]+)(?:个)?半小时后").matcher(s);
+        if (dm.find()) {
+            int n = parseChineseOrArabic(dm.group(1));
+            contextCal.add(Calendar.HOUR_OF_DAY, n);
+            contextCal.add(Calendar.MINUTE, 30);
+        } else {
+            Matcher halfOnly = Pattern.compile("(?:半小时后|半个小时后)").matcher(s);
+            if (halfOnly.find()) {
+                contextCal.add(Calendar.MINUTE, 30);
+            }
+        }
+            // then normal integer units
+            // Note: support combined forms like "1天2小时后" (units may not each be followed by '后')
+            dm = Pattern.compile("([一二三四五六七八九十百零0-9]+)(?:个)?天").matcher(s);
+            if (dm.find()) contextCal.add(Calendar.DAY_OF_MONTH, parseChineseOrArabic(dm.group(1)));
+            dm = Pattern.compile("([一二三四五六七八九十百零0-9]+)(?:个)?小时").matcher(s);
+            // avoid double-counting when a '半小时' pattern was already matched above
+            if (!s.contains("半小时") && dm.find()) contextCal.add(Calendar.HOUR_OF_DAY, parseChineseOrArabic(dm.group(1)));
+            dm = Pattern.compile("([一二三四五六七八九十百零0-9]+)(?:个)?分(?:钟)?").matcher(s);
+            if (dm.find()) contextCal.add(Calendar.MINUTE, parseChineseOrArabic(dm.group(1)));
+            dm = Pattern.compile("([一二三四五六七八九十百零0-9]+)(?:个)?秒").matcher(s);
+            if (dm.find()) contextCal.add(Calendar.SECOND, parseChineseOrArabic(dm.group(1)));
+        // If any '后' appeared and no explicit hour/minute in the token, adopt from updated context
         if ((s.contains("后") || s.contains("之后")) && tp.tunit[3] == -1) {
             tp.tunit[3] = contextCal.get(Calendar.HOUR_OF_DAY);
         }

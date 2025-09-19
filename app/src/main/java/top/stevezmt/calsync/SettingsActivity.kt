@@ -17,6 +17,10 @@ class SettingsActivity : AppCompatActivity() {
 
     private lateinit var keywordsEdit: EditText
     private lateinit var saveBtn: Button
+    private var radioGroupPreferFuture: android.widget.RadioGroup? = null
+    private var radioAuto: android.widget.RadioButton? = null
+    private var radioPrefer: android.widget.RadioButton? = null
+    private var radioDisable: android.widget.RadioButton? = null
     private lateinit var permBtn: Button
     private lateinit var notifyBtn: Button
     private lateinit var relativeWordsEdit: EditText
@@ -41,7 +45,14 @@ class SettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
+        // Enable back button in action bar
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+
         keywordsEdit = findViewById(R.id.edit_keywords)
+    radioGroupPreferFuture = findViewById(R.id.radio_prefer_future)
+    radioAuto = findViewById(R.id.radio_auto)
+    radioPrefer = findViewById(R.id.radio_prefer)
+    radioDisable = findViewById(R.id.radio_disable)
     saveBtn = findViewById(R.id.btn_save)
         permBtn = findViewById(R.id.btn_request_permission)
         notifyBtn = findViewById(R.id.btn_open_notification_access)
@@ -60,6 +71,16 @@ class SettingsActivity : AppCompatActivity() {
     relativeWordsEdit.setText(SettingsStore.getRelativeDateWords(this).joinToString(","))
     customRulesEdit.setText(SettingsStore.getCustomRules(this).joinToString(","))
 
+        // initialize preferFuture radio selection
+        try {
+            when (SettingsStore.getPreferFutureOption(this)) {
+                0 -> radioAuto?.isChecked = true
+                1 -> radioPrefer?.isChecked = true
+                2 -> radioDisable?.isChecked = true
+                else -> radioPrefer?.isChecked = true
+            }
+        } catch (_: Exception) {}
+
         saveBtn.setOnClickListener {
             val rawK = keywordsEdit.text.toString()
             val kwList = rawK.split(',').map { it.trim() }.filter { it.isNotEmpty() }
@@ -72,6 +93,17 @@ class SettingsActivity : AppCompatActivity() {
             val rawCR = customRulesEdit.text.toString()
             val crList = rawCR.split(',').map { it.trim() }.filter { it.isNotEmpty() }
             SettingsStore.setCustomRules(this, crList)
+
+            // save preferFuture selection
+            try {
+                val opt = when {
+                    radioAuto?.isChecked == true -> 0
+                    radioPrefer?.isChecked == true -> 1
+                    radioDisable?.isChecked == true -> 2
+                    else -> 1
+                }
+                SettingsStore.setPreferFutureOption(this, opt)
+            } catch (_: Exception) {}
 
             Toast.makeText(this, "配置已保存", Toast.LENGTH_SHORT).show()
         }
@@ -155,6 +187,16 @@ class SettingsActivity : AppCompatActivity() {
             val uri: Uri = Uri.fromParts("package", packageName, null)
             intent.data = uri
             startActivity(intent)
+        }
+    }
+
+    override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
+        return when (item.itemId) {
+            android.R.id.home -> {
+                finish()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
         }
     }
 }

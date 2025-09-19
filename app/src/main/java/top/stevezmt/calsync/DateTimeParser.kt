@@ -8,6 +8,17 @@ import java.util.regex.Pattern
 object DateTimeParser {
     private val TAG = "DateTimeParser"
 
+    // Public helper: expose current time used by parser (wall-clock now)
+    // Returns current time in milliseconds (Calendar.getInstance())
+    @JvmStatic
+    fun getNowMillis(): Long = Calendar.getInstance().timeInMillis
+
+    @JvmStatic
+    fun getNowFormatted(): String {
+        val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        return fmt.format(Date(getNowMillis()))
+    }
+
     data class ParseResult(val startMillis: Long, val endMillis: Long?, val title: String? = null, val location: String? = null)
 
     // Patterns for Chinese-style dates/times. These are examples and should be extended.
@@ -158,7 +169,7 @@ object DateTimeParser {
     // Original rule-based without context (legacy API)
     private object RuleBasedStrategy: ParsingStrategy {
         override fun name() = "RuleBaseNoCtx"
-        override fun tryParse(sentence: String): ParseResult? = parseDateTimeInternal(sentence, defaultRelativePattern)
+        override fun tryParse(sentence: String): ParseResult? = parseDateTimeInternal(sentence, defaultRelativePattern, preferFutureOpt = null)
         fun tryParseStandalone(sentence: String) = tryParse(sentence)
     }
 
@@ -167,11 +178,14 @@ object DateTimeParser {
         override fun name() = "RuleBaseCtx"
         override fun tryParse(sentence: String): ParseResult? {
             val map = buildRelativeTokenMap(ctx)
-            return parseDateTimeInternal(sentence, null, map)
+            // read preferFuture tri-state from settings (null=auto, true=prefer future, false=disable)
+            val prefer = SettingsStore.getPreferFutureBoolean(ctx)
+            return parseDateTimeInternal(sentence, null, map, baseMillis = null, preferFutureOpt = prefer)
         }
         fun tryParseWithBase(sentence: String, baseMillis: Long): ParseResult? {
             val map = buildRelativeTokenMap(ctx)
-            return parseDateTimeInternal(sentence, null, map, baseMillis)
+            val prefer = SettingsStore.getPreferFutureBoolean(ctx)
+            return parseDateTimeInternal(sentence, null, map, baseMillis, prefer)
         }
     }
 
@@ -225,11 +239,26 @@ object DateTimeParser {
         sentence: String,
         relativePattern: Pattern?,
         relativeMap: LinkedHashMap<String, RelativeSpec>? = null,
-        baseMillis: Long? = null
+        baseMillis: Long? = null,
+        preferFutureOpt: Boolean? = null,
     ): ParseResult? {
         Log.d(TAG, "parseDateTimeInternal - input: '$sentence'")
         try {
             val now = newCal(baseMillis)
+            // preferFuture: 尝试从 SettingsStore 取，失败则默认 true（行为参考 xk-time TimeNLP 的 isPreferFuture）
+            // preferFuture 智能模式：
+            //  - preferFutureOpt == true : 始终向未来滚动（旧行为）
+            //  - preferFutureOpt == false: 绝不向未来滚动（保留已过去时间）
+            //  - preferFutureOpt == null : AUTO 模式
+            //      * 对“仅时间”表达式: 若目标时间已过去且距离当前 < 12 小时 => 滚动到下一天；>=12 小时则认为是未来当日的真正上午/下午且不滚动
+            //      * 对“月日”表达式（不含年份）: 若日期已过去且距离当前 < 30 天 => 推到下一年，否则不滚动
+            val preferFutureRaw = preferFutureOpt ?: true
+            val autoMode = (preferFutureOpt == null)
+
+            // --- (A) 相对偏移解析 参考 xk-time TimeNLP 中 normBaseRelated / normBaseTimeRelated / normCurRelated 的语义思想 ---
+            // 支持: 3天后 / 2小时后 / 1个半小时后 / 30分钟后 / 10分钟30秒后 / 半小时后 / 45秒后 / 2天3小时20分钟后
+            // 以及 X天前 / X小时前 / X分钟前 / X秒前
+            parseRelativeOffset(sentence, baseMillis)?.let { return it }
 
             // Chaoxing style countdown: 还有24个小时 / 还有2天3小时 / 还有90分钟 / 还有1天2小时30分钟5秒
             // Use a simple, balanced regex to quickly detect countdown phrases (we parse units sequentially below).
@@ -376,6 +405,18 @@ object DateTimeParser {
                     cal.set(Calendar.HOUR_OF_DAY, adjustHourByAmPm(h, ampm))
                     cal.set(Calendar.MINUTE, min)
                 }
+                if (cal.timeInMillis < now.timeInMillis) {
+                    if (preferFutureRaw && !autoMode) {
+                        // 强制偏未来: 直接 +1 年
+                        cal.add(Calendar.YEAR, 1)
+                    } else if (autoMode) {
+                        // AUTO: 仅在距离当前 < 30 天认为用户忘写年份（跨年临近）
+                        val diffDays = ((now.timeInMillis - cal.timeInMillis) / (24*3600*1000L)).toInt()
+                        if (diffDays in 0..29) {
+                            cal.add(Calendar.YEAR, 1)
+                        }
+                    }
+                }
                 val end = cal.timeInMillis + 60 * 60 * 1000L
                 val (t, loc) = extractTitleAndLocation(sentence)
                 Log.d(TAG, "month/day matched: ${Date(cal.timeInMillis)}")
@@ -420,7 +461,17 @@ object DateTimeParser {
                 cal.set(Calendar.HOUR_OF_DAY, adjustHourByAmPm(hour, ampm))
                 cal.set(Calendar.MINUTE, minute)
                 cal.set(Calendar.SECOND, 0)
-                if (cal.timeInMillis < now.timeInMillis) cal.add(Calendar.DAY_OF_MONTH, 1)
+                if (cal.timeInMillis < now.timeInMillis) {
+                    if (preferFutureRaw && !autoMode) {
+                        cal.add(Calendar.DAY_OF_MONTH, 1)
+                    } else if (autoMode) {
+                        val diffMillis = now.timeInMillis - cal.timeInMillis
+                        val diffHours = diffMillis / (3600*1000L)
+                        if (diffHours in 0..11) { // 已过且不足 12 小时，认为指向下一天
+                            cal.add(Calendar.DAY_OF_MONTH, 1)
+                        }
+                    }
+                }
                 val (t, loc) = extractTitleAndLocation(sentence)
                 Log.d(TAG, "time-only matched: ${Date(cal.timeInMillis)}")
                 return ParseResult(cal.timeInMillis, cal.timeInMillis + 60 * 60 * 1000L, t, loc)
@@ -525,6 +576,63 @@ object DateTimeParser {
         return null
     }
 
+    // 解析相对偏移: 将『X天后』、『2小时30分钟后』等转为绝对时间 (start=end-1h 默认)；返回 null 表示不匹配
+    private fun parseRelativeOffset(sentence: String, baseMillis: Long?): ParseResult? {
+        // 触发词: 后, 之后, 以后, 前, 之前, 以前
+        if (!sentence.contains("后") && !sentence.contains("前")) return null
+        // 快速正则: 捕获形如 2天3小时20分钟10秒后 / 1个半小时后 / 半小时后
+        val tailMatcher = Regex("(后|之后|以后|前|之前|以前)").find(sentence) ?: return null
+        val directionWord = tailMatcher.value
+        val direction = if (directionWord.contains("后") || directionWord.contains("之后") || directionWord.contains("以后")) 1 else -1
+        // 抽取单位链
+        val unitRegex = Regex("((?:[一二三四五六七八九十百零两0-9]+)?(?:个)?半|[一二三四五六七八九十百零两0-9]+|半)(?:个)?(年|个月|月|周|星期|天|日|小时|分钟|分|秒)")
+        val segment = sentence.substring(0, tailMatcher.range.first + tailMatcher.value.length)
+        val matches = unitRegex.findAll(segment).toList()
+        if (matches.isEmpty()) return null
+        var totalMillis = 0L
+        fun numToken(raw: String): Double {
+            var r = raw
+            var half = false
+            if (r.endsWith("半")) { half = true; r = r.removeSuffix("半") }
+            val value = when {
+                r == "半" || r.isBlank() -> 0.5
+                r.matches(Regex("[0-9]+")) -> r.toDouble()
+                else -> toArabic(r).toDouble()
+            }
+            return value + if (half) 0.5 else 0.0
+        }
+        for (m in matches) {
+            val full = m.value
+            val numberPart = full.dropLastWhile { it in listOf('年','月','周','星','期','天','日','小','时','分','钟','秒') }. // naive, we recompute properly below
+                replace(Regex("(年|个月|月|周|星期|天|日|小时|分钟|分|秒)"), "")
+            val unit = m.groupValues.lastOrNull { it.isNotBlank() && it.any { c -> c !in '0'..'9' } } ?: continue
+            val value = when {
+                full.startsWith("半") -> 0.5
+                full.contains("个半") && (unit == "小时" || unit == "月" || unit == "年") -> numToken(full.substringBefore("个半")) + 0.5
+                full.endsWith("半${unit}") -> numToken(full.substringBefore("半${unit}")) + 0.5
+                else -> numToken(full.removeSuffix(unit))
+            }
+            val millisPer = when (unit) {
+                "年" -> 365L * 24 * 3600 * 1000 // 粗略，不处理闰年
+                "个月", "月" -> 30L * 24 * 3600 * 1000 // 粗略
+                "周", "星期" -> 7L * 24 * 3600 * 1000
+                "天", "日" -> 24L * 3600 * 1000
+                "小时" -> 3600L * 1000
+                "分钟", "分" -> 60L * 1000
+                "秒" -> 1000L
+                else -> 0L
+            }
+            totalMillis += (value * millisPer).toLong()
+        }
+        if (totalMillis <= 0) return null
+        val base = newCal(baseMillis)
+        val target = base.timeInMillis + direction * totalMillis
+        val start = if (direction > 0) target - 60 * 60 * 1000L else target // 未来: 以截止视角, 过去: 直接事件时刻
+        val (t, loc) = extractTitleAndLocation(sentence)
+        val title = t ?: if (direction > 0) "提醒" else "事件"
+        return ParseResult(start, target, title, loc)
+    }
+
     private fun parseWeekday(sentence: String?): Int? {
         if (sentence == null) return null
         val s = sentence
@@ -601,7 +709,7 @@ object DateTimeParser {
         var location: String? = null
 
         // location patterns
-    val locRegex = Regex("(?:地点|地址|场地|地点：|地点:|位置|集合地点)\\s*[:：]?\\s*([\\u4e00-\\u9fa5A-Za-z0-9\\-—–,，。、\\s]{2,60})")
+        val locRegex = Regex("(?:地点|地址|场地|地点：|地点:|位置|集合地点)\\s*[:：]?\\s*([\\u4e00-\\u9fa5A-Za-z0-9\\-—–,，。、\\s]{2,60})")
         val locMatch = locRegex.find(sentence)
         if (locMatch != null) {
             location = locMatch.groupValues.getOrNull(1)?.trim()?.trimEnd('。', '，', ',')
@@ -731,4 +839,18 @@ object DateTimeParser {
             else -> hour
         }
     }
+
+    /*
+     * ==== 手工快速测试用例建议 (基于当前实现 + 引入 xk-time 语义要点) ====
+     * 1. "3天后截止提交报告" => 目标时间 = now + 3d, start = target -1h, title 包含 "截止" 或提取出 "提交报告"
+     * 2. "2小时30分钟后开会" => now + 2h30m
+     * 3. "半小时后提醒我喝水" => now + 30m
+     * 4. "1个半小时后出发" => now + 1h30m
+     * 5. "10分钟30秒后锁屏" => +10m30s
+     * 6. "3天前的日志" => target = now - 3d (start=target)
+     * 7. "9月23日晚上8点开会" (若今天 9/19) => 今年 9/23 20:00
+     * 8. "1月3日早上8点" 在 12月31日 (preferFuture=true) => 下一年 1/3 08:00
+     * 9. "周五3点到5点开会" (尚未做级联继承 Range 第二时间的日期, TODO)
+     * 10."下午3点讨论" 当前时间上午10点 => 今天 15:00 (若已过则 +1 天)
+     */
 }

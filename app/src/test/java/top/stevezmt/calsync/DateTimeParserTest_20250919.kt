@@ -49,6 +49,8 @@ class DateTimeParserTest_20250919 {
         assertEquals(24, cal.get(Calendar.DAY_OF_MONTH))
         assertEquals(18, cal.get(Calendar.HOUR_OF_DAY))
     }
+    @Test
+    fun testTomorrowAfternoon4() {
 
     @Test
     fun testExplicitChineseDate() {

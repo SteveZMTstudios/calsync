@@ -58,7 +58,11 @@ class MainActivity : AppCompatActivity() {
                     val id = intent.getLongExtra(NotificationUtils.EXTRA_EVENT_ID, -1L)
                     val title = intent.getStringExtra(NotificationUtils.EXTRA_EVENT_TITLE) ?: ""
                     val start = intent.getLongExtra(NotificationUtils.EXTRA_EVENT_START, 0L)
+                    val base = intent.getLongExtra(NotificationUtils.EXTRA_EVENT_BASE, -1L)
                     appendResult("事件创建: id=$id title=$title start=${java.text.SimpleDateFormat("M月d日 H:mm").format(java.util.Date(start))}")
+                    if (base > 0) {
+                        appendResult("解析时的 now (DateTimeParser base): ${DateTimeParser.getNowFormatted()}  (wall clock now); parser baseMillis=$base")
+                    }
                 }
             } catch (_: Throwable) {}
         }
@@ -130,6 +134,10 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             // 无论如何不阻塞主流程
         }
+        // Print DateTimeParser current now/time when opening main UI
+        try {
+            appendResult("DateTimeParser now: ${DateTimeParser.getNowFormatted()}")
+        } catch (_: Throwable) {}
     }
 
     override fun onStart() {

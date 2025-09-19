@@ -17,6 +17,9 @@ class AppPickerActivity : AppCompatActivity() {
 		super.onCreate(savedInstanceState)
 		setContentView(R.layout.activity_app_picker)
 
+		// Enable back button in action bar
+		supportActionBar?.setDisplayHomeAsUpEnabled(true)
+
 	listView = findViewById(R.id.list_apps)
 		saveBtn = findViewById(R.id.btn_save_selection)
 	showAllCheck = findViewById(R.id.cb_show_all)
@@ -73,5 +76,15 @@ class AppPickerActivity : AppCompatActivity() {
 		SettingsStore.setSelectedSourceApps(this, selected.map { it.packageName }, selected.map { it.label })
 		Toast.makeText(this, "已选择 ${selected.size} 个应用", Toast.LENGTH_SHORT).show()
 		finish()
+	}
+
+	override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
+		return when (item.itemId) {
+			android.R.id.home -> {
+				finish()
+				true
+			}
+			else -> super.onOptionsItemSelected(item)
+		}
 	}
 }

@@ -23,6 +23,8 @@ object NotificationUtils {
 	const val EXTRA_EVENT_ID = "extra_event_id"
 	const val EXTRA_EVENT_TITLE = "extra_event_title"
 	const val EXTRA_EVENT_START = "extra_event_start"
+	// baseMillis used by parser when creating this event (System.currentTimeMillis captured at processing start)
+	const val EXTRA_EVENT_BASE = "extra_event_base"
 
 	fun ensureChannels(context: Context) {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

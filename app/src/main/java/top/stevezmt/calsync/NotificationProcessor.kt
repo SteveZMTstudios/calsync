@@ -52,7 +52,7 @@ object NotificationProcessor {
 			var lastReason: String? = null
 				for (sentence in sentences) {
 				try {
-						val parsed = DateTimeParser.parseDateTime(context, sentence, baseMillis)
+							val parsed = DateTimeParser.parseDateTime(context, sentence, baseMillis)
 					if (parsed == null) { lastReason = "解析失败($sentence)"; continue }
 
 					val eventTitle = parsed.title?.takeIf { it.isNotBlank() } ?: run {
@@ -66,6 +66,15 @@ object NotificationProcessor {
 					if (eventId != null) {
 						NotificationUtils.sendEventCreated(context, eventId, parsed.startMillis, eventTitle, parsed.location)
 						notifier.onEventCreated(eventId, eventTitle, parsed.startMillis, parsed.endMillis ?: (parsed.startMillis + 60*60*1000L), parsed.location)
+						// also broadcast baseMillis so UI can display what 'now' was when parsing
+						try {
+							val b = android.content.Intent(NotificationUtils.ACTION_EVENT_CREATED)
+							b.putExtra(NotificationUtils.EXTRA_EVENT_ID, eventId)
+							b.putExtra(NotificationUtils.EXTRA_EVENT_TITLE, eventTitle)
+							b.putExtra(NotificationUtils.EXTRA_EVENT_START, parsed.startMillis)
+							b.putExtra(NotificationUtils.EXTRA_EVENT_BASE, baseMillis)
+							context.sendBroadcast(b)
+						} catch (_: Throwable) {}
 						anyCreated = true
 						lastEventId = eventId
 					} else {
