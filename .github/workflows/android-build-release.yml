@@ -78,10 +78,10 @@ jobs:
           fi
 
       - name: Create GitHub Release
-  id: create_release
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  run: |
+        id: create_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
     set -euo pipefail
 
     # 1) 获取版本号（优先：app/build.gradle -> app/build.gradle.kts -> gradle.properties）
