@@ -5,10 +5,7 @@ import java.util.Date;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Highly trimmed adaptation of Time-NLP TimeUnit.java
- * Keeps core normalization for: year/month/day/hour/minute/second + fuzzy period words
- */
+
 public class TimeUnit {
     public final TimePoint tp = new TimePoint();
     private final String exp; // matched expression fragment

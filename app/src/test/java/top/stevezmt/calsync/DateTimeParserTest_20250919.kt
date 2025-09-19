@@ -20,7 +20,7 @@ class DateTimeParserTest_20250919 {
     }
 
     private fun parseSlots(text: String): List<TimeNLPAdapter.ParseSlot> {
-        return TimeNLPAdapter.parse(DummyContext, text, baseCal.timeInMillis)
+        return TimeNLPAdapter.parse(text, baseCal.timeInMillis)
     }
 
     @Test
@@ -51,7 +51,7 @@ class DateTimeParserTest_20250919 {
     }
     @Test
     fun testTomorrowAfternoon4() {
-
+    }
     @Test
     fun testExplicitChineseDate() {
         val slots = parseSlots("二零二五年九月二十六日上午十点 会议")
@@ -152,4 +152,6 @@ class DateTimeParserTest_20250919 {
     }
 
     object DummyContext: android.content.ContextWrapper(null)
-}
+    }
+
+

@@ -14,10 +14,12 @@ import android.widget.Switch
 import android.app.AlertDialog
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.drawerlayout.widget.DrawerLayout
 import com.google.android.material.navigation.NavigationView
+import androidx.core.content.edit
 
 class MainActivity : AppCompatActivity() {
 
@@ -53,11 +55,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onBackPressed() {
-        // Instead of finishing the activity, move the app to background per requirement
-        moveTaskToBack(true)
-    }
-
     private val requestNotificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -65,7 +62,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val eventCreatedReceiver = object: android.content.BroadcastReceiver() {
-        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+        override fun onReceive(context: Context?, intent: Intent?) {
             try {
                 if (intent == null) return
                 if (intent.action == NotificationUtils.ACTION_EVENT_CREATED) {
@@ -89,7 +86,14 @@ class MainActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setHomeAsUpIndicator(R.drawable.menu_24)
 
-        
+        // Handle back press to move task to back
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                // Instead of finishing the activity, move the app to background per requirement
+                moveTaskToBack(true)
+            }
+        })
+
 
     titleInput = findViewById(R.id.edit_test_title)
         contentInput = findViewById(R.id.edit_test_content)
@@ -130,8 +134,8 @@ class MainActivity : AppCompatActivity() {
         // Populate nav header title and version dynamically
         try {
             val header = navView.getHeaderView(0)
-            val titleView = header.findViewById<android.widget.TextView>(R.id.nav_header_title)
-            val versionView = header.findViewById<android.widget.TextView>(R.id.nav_header_version)
+            val titleView = header.findViewById<TextView>(R.id.nav_header_title)
+            val versionView = header.findViewById<TextView>(R.id.nav_header_version)
             titleView?.text = getString(R.string.app_name)
             val pkgInfo = packageManager.getPackageInfo(packageName, 0)
             versionView?.text = "版本 ${pkgInfo.versionName}"
@@ -158,7 +162,7 @@ class MainActivity : AppCompatActivity() {
 
         // 首次启动：初始化通知通道并请求通知权限（如果需要）
         try {
-            val prefs = getSharedPreferences("calsync_prefs", Context.MODE_PRIVATE)
+            val prefs = getSharedPreferences("calsync_prefs", MODE_PRIVATE)
             val firstRun = prefs.getBoolean("first_run", true)
             if (firstRun) {
                 // Ensure notification channels exist so user can manage them immediately
@@ -166,14 +170,14 @@ class MainActivity : AppCompatActivity() {
 
                 // Request runtime POST_NOTIFICATIONS permission on Android 13+
                 if (Build.VERSION.SDK_INT >= 33) {
-                    if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                        requestNotificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                     }
                 }
 
-                prefs.edit().putBoolean("first_run", false).apply()
+                prefs.edit { putBoolean("first_run", false) }
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // 无论如何不阻塞主流程
         }
         // Print DateTimeParser current now/time when opening main UI
@@ -221,7 +225,7 @@ class MainActivity : AppCompatActivity() {
                 .show()
         } else if (NotificationHelper.needsSpecialRomSettings()) {
             // 检查是否需要特殊厂商设置的提示
-            val sharedPrefs = getSharedPreferences("calsync_prefs", Context.MODE_PRIVATE)
+            val sharedPrefs = getSharedPreferences("calsync_prefs", MODE_PRIVATE)
             val romHintShown = sharedPrefs.getBoolean("rom_hint_shown", false)
             
             if (!romHintShown) {
@@ -230,7 +234,7 @@ class MainActivity : AppCompatActivity() {
                     .setMessage(NotificationHelper.getSpecialRomSettingsHint())
                     .setPositiveButton("知道了") { _, _ ->
                         // 设置标记，只显示一次
-                        sharedPrefs.edit().putBoolean("rom_hint_shown", true).apply()
+                        sharedPrefs.edit { putBoolean("rom_hint_shown", true) }
                     }
                     .setNegativeButton("稍后再说") { dialog, _ -> dialog.dismiss() }
                     .show()
@@ -277,17 +281,9 @@ class MainActivity : AppCompatActivity() {
             val perms = mutableListOf<String>().apply {
                 add(Manifest.permission.WRITE_CALENDAR)
                 add(Manifest.permission.READ_CALENDAR)
-                if (Build.VERSION.SDK_INT >= 33) add(android.Manifest.permission.POST_NOTIFICATIONS)
+                if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
             }
             requestCalendarPermission.launch(perms.toTypedArray())
-        }
-    }
-
-    private fun requestNotificationRuntime() {
-        if (Build.VERSION.SDK_INT >= 33) {
-            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                requestNotificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-            }
         }
     }
 

@@ -1,8 +1,12 @@
 package top.stevezmt.calsync
 
-import android.content.pm.ApplicationInfo
 import android.os.Bundle
-import android.widget.*
+import android.widget.BaseAdapter
+import android.widget.Button
+import android.widget.CheckBox
+import android.widget.CheckedTextView
+import android.widget.ListView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
 class AppPickerActivity : AppCompatActivity() {

@@ -2,38 +2,25 @@ package top.stevezmt.calsync
 
 import android.annotation.SuppressLint
 import android.app.Notification
-import android.content.Context
+import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Intent
+import android.os.Build
+import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import android.app.PendingIntent
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.os.Build
-import java.util.Locale
-import java.util.Date
-import java.text.SimpleDateFormat
-import android.os.Bundle
-import android.widget.Toast
-import android.content.pm.ApplicationInfo
-import android.content.ComponentName
+
 // ...existing imports...
 
 @SuppressLint("Registered")
 class NotificationMonitorService : NotificationListenerService() {
     private val TAG = "NotificationMonitor"
     private val scope = CoroutineScope(Dispatchers.Default)
-    // recent notifications are stored in NotificationCache
-    private val debugLogging: Boolean
-        get() = try {
-            (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-        } catch (e: Exception) { false }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
@@ -46,11 +33,16 @@ class NotificationMonitorService : NotificationListenerService() {
                 val channelsToCheck = listOf(NotificationUtils.CHANNEL_CONFIRM, NotificationUtils.CHANNEL_ERROR)
                 for (ch in channelsToCheck) {
                     try {
-                        val c = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) nm?.getNotificationChannel(ch) else null
-                        if (c != null) {
-                            Log.i(TAG, "channel=${c.id} importance=${c.importance} name=${c.name} showBadge=${c.canShowBadge()}")
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            val c = nm?.getNotificationChannel(ch)
+                            if (c != null) {
+                                Log.i(TAG, "channel=${c.id} importance=${c.importance} name=${c.name} showBadge=${c.canShowBadge()}")
+                            } else {
+                                Log.i(TAG, "channel=$ch not found")
+                            }
                         } else {
-                            Log.i(TAG, "channel=$ch not found")
+                            // NotificationChannel API is not available before O; just log that channel info isn't supported.
+                            Log.i(TAG, "channel=$ch (not supported below O)")
                         }
                     } catch (e: Exception) {
                         Log.w(TAG, "failed to inspect channel $ch", e)
@@ -114,7 +106,9 @@ class NotificationMonitorService : NotificationListenerService() {
             val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.map { it.toString() } ?: emptyList()
             // MessagingStyle 支持 (QQ/微信聊天类通知经常走这里)
             @Suppress("DEPRECATION") // getParcelableArray is deprecated on newer SDKs; safe here for backward compatibility
-            val msgBundles = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+            // Avoid referencing Notification.EXTRA_MESSAGES directly because it requires API 24;
+            // use the raw key so this compiles with minSdk 23.
+            val msgBundles = extras.getParcelableArray("android.app.extra.MESSAGES")
             val messages = msgBundles?.mapNotNull { b ->
                 if (b is Bundle) {
                     val text = b.getCharSequence("text")?.toString()
@@ -125,7 +119,7 @@ class NotificationMonitorService : NotificationListenerService() {
                 } else null
             } ?: emptyList()
             val content = (listOfNotNull(primary, bigText, subText, summary) + lines + messages)
-                .filter { !it.isNullOrBlank() }
+                .filter { it.isNotBlank() }
                 .distinct()
                 .joinToString("\n")
 
@@ -151,11 +145,6 @@ class NotificationMonitorService : NotificationListenerService() {
         }
     }
 
-    // expose recent notifications snapshot for diagnostics
-    fun getRecentNotificationsSnapshot(): List<String> {
-        return NotificationCache.snapshot()
-    }
-
     private fun processNotification(pkg: String, title: String, content: String) {
         val res = NotificationProcessor.process(applicationContext, NotificationProcessor.ProcessInput(pkg, title, content), object: NotificationProcessor.ConfirmationNotifier{
             override fun onEventCreated(eventId: Long, title: String, startMillis: Long, endMillis: Long, location: String?) {
@@ -167,7 +156,7 @@ class NotificationMonitorService : NotificationListenerService() {
                     val entry = "[$ts] event_created id=$eventId title=$title start=${startMillis}"
                     NotificationCache.add(entry)
                     try {
-                        val b = android.content.Intent(NotificationUtils.ACTION_EVENT_CREATED)
+                        val b = Intent(NotificationUtils.ACTION_EVENT_CREATED)
                         b.putExtra(NotificationUtils.EXTRA_EVENT_ID, eventId)
                         b.putExtra(NotificationUtils.EXTRA_EVENT_TITLE, title)
                         b.putExtra(NotificationUtils.EXTRA_EVENT_START, startMillis)
@@ -189,24 +178,4 @@ class NotificationMonitorService : NotificationListenerService() {
         try { Log.w(TAG, "error: ${msg ?: "unknown"}") } catch (_: Throwable) {}
     }
 
-    @Suppress("DEPRECATION") // Bundle.get is deprecated in Java bindings; kept for broad compatibility when printing values
-    private fun dumpExtras(extras: Bundle, maxLen: Int = 4000): String {
-        val keys = extras.keySet().sorted()
-        val sb = StringBuilder()
-        for (k in keys) {
-            val v = try { extras.get(k) } catch (e: Exception) { "<error:${e.message}>" }
-            sb.append(k).append('=').append(valueToString(v)).append('\n')
-            if (sb.length >= maxLen) { sb.append("...truncated..."); break }
-        }
-        return sb.toString()
-    }
-
-    private fun valueToString(v: Any?): String = when (v) {
-        null -> "null"
-        is CharSequence -> v.toString()
-        is Bundle -> "Bundle{" + v.keySet().joinToString() + "}"
-        is Array<*> -> "Array(size=${v.size})"
-        is IntArray -> "IntArray(size=${v.size})"
-        else -> v.javaClass.simpleName + ':' + v.toString()
-    }
 }

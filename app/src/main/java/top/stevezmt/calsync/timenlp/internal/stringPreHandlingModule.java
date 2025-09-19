@@ -3,12 +3,6 @@ package top.stevezmt.calsync.timenlp.internal;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Adapted (trimmed) from Time-NLP stringPreHandlingModule.java
- * Responsibilities:
- *  - Normalize full-width chars / remove noise tokens
- *  - Convert Chinese numerals to Arabic digits for downstream regex
- */
 public class stringPreHandlingModule {
 
     private static final Map<Character, Integer> CH_NUM = new HashMap<>();

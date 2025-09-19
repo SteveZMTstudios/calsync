@@ -6,10 +6,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Simplified TimeNormalizer: extracts time expressions and produces TimeUnit list.
- * This is a minimal adaptation – not full feature parity with upstream.
- */
+
 public class TimeNormalizer {
 
     private static final Pattern TIME_EXPRESSION = Pattern.compile(

@@ -1,6 +1,7 @@
 package top.stevezmt.calsync
 
 import android.content.Context
+import androidx.core.content.edit
 
 object SettingsStore {
     private const val PREFS = "calsync_prefs"
@@ -29,12 +30,12 @@ object SettingsStore {
 
     fun setKeywords(context: Context, keywords: List<String>) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_KEYWORDS, keywords.joinToString(",")).apply()
+        prefs.edit { putString(KEY_KEYWORDS, keywords.joinToString(",")) }
     }
 
     fun setSelectedCalendar(context: Context, id: Long, name: String) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        prefs.edit().putLong(KEY_CAL_ID, id).putString(KEY_CAL_NAME, name).apply()
+        prefs.edit { putLong(KEY_CAL_ID, id).putString(KEY_CAL_NAME, name) }
     }
 
     fun getSelectedCalendarId(context: Context): Long? {
@@ -68,7 +69,7 @@ object SettingsStore {
 
     fun setPreferFutureOption(context: Context, option: Int) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        prefs.edit().putInt(KEY_PREFER_FUTURE, option).apply()
+        prefs.edit { putInt(KEY_PREFER_FUTURE, option) }
     }
 
     // Helper: returns nullable Boolean: null = Auto, true = prefer future, false = disable
@@ -81,14 +82,9 @@ object SettingsStore {
         }
     }
 
-    fun setTimeNLPEnabled(context: Context, enabled: Boolean) {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean(KEY_ENABLE_TIMENLP, enabled).apply()
-    }
-
     fun setRelativeDateWords(context: Context, words: List<String>) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_RELATIVE_WORDS, words.joinToString(",")).apply()
+        prefs.edit { putString(KEY_RELATIVE_WORDS, words.joinToString(",")) }
     }
 
     private fun defaultRelativeWords(): List<String> = listOf(
@@ -112,7 +108,7 @@ object SettingsStore {
 
     fun setKeepAliveEnabled(context: Context, enabled: Boolean) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean(KEY_KEEP_ALIVE, enabled).apply()
+        prefs.edit { putBoolean(KEY_KEEP_ALIVE, enabled) }
     }
 
     fun getCustomRules(context: Context): List<String> {
@@ -123,21 +119,12 @@ object SettingsStore {
 
     fun setCustomRules(context: Context, rules: List<String>) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_CUSTOM_RULES, rules.joinToString(",")).apply()
-    }
-
-    // Return a suggested title given the notification title; fallback to a trimmed snippet
-    fun getSuggestedTitle(context: Context, notificationTitle: String): String {
-        val t = notificationTitle.trim()
-        if (t.isEmpty()) return "通知"
-        // if contains colon or dash, take part after it
-    val parts = t.split(Regex("[:：\\-—]"))
-        return parts.last().takeIf { it.isNotBlank() }?.trim()?.take(40) ?: t.take(40)
+        prefs.edit { putString(KEY_CUSTOM_RULES, rules.joinToString(",")) }
     }
 
     fun setSelectedSourceApp(context: Context, pkg: String?, name: String?) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_SELECTED_APP_PKG, pkg).putString(KEY_SELECTED_APP_NAME, name).apply()
+        prefs.edit { putString(KEY_SELECTED_APP_PKG, pkg).putString(KEY_SELECTED_APP_NAME, name) }
     }
 
     fun getSelectedSourceAppPkg(context: Context): String? {
@@ -153,10 +140,10 @@ object SettingsStore {
     // ===== New multi-select APIs =====
     fun setSelectedSourceApps(context: Context, pkgs: List<String>, names: List<String>) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        prefs.edit()
-            .putString(KEY_SELECTED_APP_PKGS, pkgs.joinToString(","))
-            .putString(KEY_SELECTED_APP_NAMES, names.joinToString(","))
-            .apply()
+        prefs.edit {
+            putString(KEY_SELECTED_APP_PKGS, pkgs.joinToString(","))
+                .putString(KEY_SELECTED_APP_NAMES, names.joinToString(","))
+        }
     }
 
     fun getSelectedSourceAppPkgs(context: Context): List<String> {

@@ -5,10 +5,10 @@ import android.content.Context
 import android.net.Uri
 import android.provider.CalendarContract
 import android.util.Log
-import java.util.*
+import java.util.TimeZone
 
 object CalendarHelper {
-    private val TAG = "CalendarHelper"
+    private const val TAG = "CalendarHelper"
 
     fun insertEvent(context: Context, title: String, description: String, startMillis: Long, endMillis: Long?, location: String? = null): Long? {
         try {
@@ -34,7 +34,7 @@ object CalendarHelper {
                 Log.i(TAG, "Inserted event: $uri")
                 return try {
                     android.content.ContentUris.parseId(uri)
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     null
                 }
             } else {

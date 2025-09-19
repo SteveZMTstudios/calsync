@@ -25,7 +25,7 @@ class DateTimeParserTest {
 
     private fun parseSlots(text: String): List<TimeNLPAdapter.ParseSlot> {
         // Use internal adapter with provided base time
-        return TimeNLPAdapter.parse(DummyContext, text, baseCal.timeInMillis)
+        return TimeNLPAdapter.parse(text, baseCal.timeInMillis)
     }
 
     @Test
@@ -113,7 +113,7 @@ class DateTimeParserTest {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }
-        val slots = TimeNLPAdapter.parse(DummyContext, "周五下午13:10", base.timeInMillis)
+        val slots = TimeNLPAdapter.parse("周五下午13:10", base.timeInMillis)
         assertNotNull(slots.firstOrNull())
         val cal = Calendar.getInstance().apply { timeInMillis = slots.first().startMillis }
         // Expect Friday 2025-09-19 13:10

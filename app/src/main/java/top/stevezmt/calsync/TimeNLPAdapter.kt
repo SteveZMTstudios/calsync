@@ -1,9 +1,8 @@
 package top.stevezmt.calsync
 
-import android.content.Context
-import top.stevezmt.calsync.timenlp.internal.TimeNormalizer
 import android.util.Log
-import java.util.*
+import top.stevezmt.calsync.timenlp.internal.TimeNormalizer
+import java.util.Calendar
 
 object TimeNLPAdapter {
     private const val TAG = "TimeNLPAdapter"
@@ -16,22 +15,22 @@ object TimeNLPAdapter {
     private data class CacheKey(val text: String, val baseMinute: Long)
 
     // very small LRU cache
-    private val CACHE_SIZE = 64
+    private const val CACHE_SIZE = 64
     private val cache: LinkedHashMap<CacheKey, List<ParseSlot>> = object : LinkedHashMap<CacheKey, List<ParseSlot>>(CACHE_SIZE, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<CacheKey, List<ParseSlot>>?): Boolean {
             return size > CACHE_SIZE
         }
     }
 
-    fun init(context: Context) {
+    fun init() {
         if (initialized) return
         normalizer = TimeNormalizer()
         // no external model file for the simplified integration; the internal regex is used
         initialized = true
     }
 
-    fun parse(context: Context, text: String, baseMillis: Long = System.currentTimeMillis()): List<ParseSlot> {
-        if (!initialized) init(context)
+    fun parse(text: String, baseMillis: Long = System.currentTimeMillis()): List<ParseSlot> {
+        if (!initialized) init()
         // key by minute to avoid cache miss due to millisecond differences
         val baseMinute = baseMillis / (60*1000L)
         val key = CacheKey(text, baseMinute)
@@ -42,24 +41,22 @@ object TimeNLPAdapter {
         val cal = Calendar.getInstance()
         cal.timeInMillis = baseMillis
         normalizer.parse(text, cal)
-        val units = normalizer.getTimeUnits()
+        val units = normalizer.timeUnits
         // Debugging aid: log units for Friday 3 to 5 range to diagnose merging
         if (text.contains("周") && text.contains("3点") && text.contains("5点")) {
             Log.d(TAG, "[TimeNLPAdapter DEBUG] parsing text='" + text + "' units.size=" + units.size)
             for ((idx, u) in units.withIndex()) {
-                val rc = u.getResolvedTime()
+                val rc = u.resolvedTime
                 val c = Calendar.getInstance()
                 if (rc != null) c.timeInMillis = rc
-                Log.d(TAG, "[TimeNLPAdapter DEBUG] unit[" + idx + "] exp='" + u.getExp() + "' resolved='" + (if (rc==null) "null" else (c.get(Calendar.YEAR).toString()+"-"+(c.get(Calendar.MONTH)+1)+"-"+c.get(Calendar.DAY_OF_MONTH)+" "+c.get(Calendar.HOUR_OF_DAY)+":"+c.get(Calendar.MINUTE))) + "'")
+                Log.d(TAG, "[TimeNLPAdapter DEBUG] unit[" + idx + "] exp='" + u.exp + "' resolved='" + (if (rc==null) "null" else (c.get(Calendar.YEAR).toString()+"-"+(c.get(Calendar.MONTH)+1)+"-"+c.get(Calendar.DAY_OF_MONTH)+" "+c.get(Calendar.HOUR_OF_DAY)+":"+c.get(Calendar.MINUTE))) + "'")
             }
         }
         // Quick direct patterns for relative durations not always captured as time-info units
         // e.g. "3个半小时后", "1天2小时后" — build slots directly from base
         fun parseChineseOrArabicK(s: String): Int {
-            try { return s.toInt() } catch (e: Exception) {}
+            try { return s.toInt() } catch (_: Exception) {}
             val map = mapOf('零' to 0,'〇' to 0,'一' to 1,'二' to 2,'两' to 2,'三' to 3,'四' to 4,'五' to 5,'六' to 6,'七' to 7,'八' to 8,'九' to 9)
-            var acc = 0
-            var lastUnit = 1
             var temp = 0
             for (c in s) {
                 when (c) {
@@ -114,59 +111,60 @@ object TimeNLPAdapter {
         while (i < units.size) {
             if (consumed[i]) { i++; continue }
             val u = units[i]
-            val exp = u.getExp()
-            val tval = u.getResolvedTime()
+            val exp = u.exp
+            val tval = u.resolvedTime
             // if this unit already contains both date and time, emit directly
                 // Special-case: if this unit contains both date+time but the original text has a range connector
                 // between this unit and the next (e.g. '周五3点到5点'), handle as a range instead of emitting single
-                if (hasDateInfo(exp) && hasTimeInfo(exp) && i+1 < units.size && !consumed[i+1]) {
-                    val u2 = units[i+1]
-                    val exp2 = u2.getExp()
-                    // try find occurrences of the unit expressions in the original text to inspect the between substring
-                    var idx1 = text.indexOf(exp)
-                    if (idx1 >= 0) {
-                        val startSearch = idx1 + exp.length
-                        val idx2 = text.indexOf(exp2, startSearch)
-                        if (idx2 >= 0) {
-                            val between = text.substring(startSearch, idx2)
-                            if (between.contains("到") || between.contains("-") || between.contains("~")) {
-                                val tval2 = u2.getResolvedTime()
-                                if (tval != null && tval2 != null) {
-                                    val sc = Calendar.getInstance(); sc.timeInMillis = tval
-                                    val ec = Calendar.getInstance(); ec.timeInMillis = tval2
-                                    if (ec.get(Calendar.YEAR) == sc.get(Calendar.YEAR) && ec.get(Calendar.DAY_OF_YEAR) == sc.get(Calendar.DAY_OF_YEAR)) {
-                                        // same day
-                                    } else {
-                                        ec.set(Calendar.YEAR, sc.get(Calendar.YEAR))
-                                        ec.set(Calendar.MONTH, sc.get(Calendar.MONTH))
-                                        ec.set(Calendar.DAY_OF_MONTH, sc.get(Calendar.DAY_OF_MONTH))
-                                    }
-                                    val sh = sc.get(Calendar.HOUR_OF_DAY)
-                                    val eh = ec.get(Calendar.HOUR_OF_DAY)
-                                    if (sh in 0..6 && eh in 0..6) {
-                                        sc.add(Calendar.HOUR_OF_DAY, 12)
-                                        ec.add(Calendar.HOUR_OF_DAY, 12)
-                                    } else if (sh >= 12 && eh in 0..6) {
-                                        ec.add(Calendar.HOUR_OF_DAY, 12)
-                                    }
-                                    out.add(ParseSlot(sc.timeInMillis, ec.timeInMillis, exp + " to " + exp2, 0.97))
-                                    consumed[i] = true
-                                    consumed[i+1] = true
-                                    i += 2
-                                    continue
+            if (hasDateInfo(exp) && hasTimeInfo(exp) && i+1 < units.size && !consumed[i+1]) {
+                val u2 = units[i+1]
+                val exp2 = u2.exp
+                // try find occurrences of the unit expressions in the original text to inspect the between substring
+                val idx1 = text.indexOf(exp)
+                if (idx1 >= 0) {
+                    val startSearch = idx1 + exp.length
+                    val idx2 = text.indexOf(exp2, startSearch)
+                    if (idx2 >= 0) {
+                        val between = text.substring(startSearch, idx2)
+                        if (between.contains("到") || between.contains("-") || between.contains("~")) {
+                            val tval2 = u2.resolvedTime
+                            if (tval != null && tval2 != null) {
+                                val sc = Calendar.getInstance(); sc.timeInMillis = tval
+                                val ec = Calendar.getInstance(); ec.timeInMillis = tval2
+                                if (ec.get(Calendar.YEAR) == sc.get(Calendar.YEAR) && ec.get(Calendar.DAY_OF_YEAR) == sc.get(Calendar.DAY_OF_YEAR)) {
+                                    // same day
+                                } else {
+                                    ec.set(Calendar.YEAR, sc.get(Calendar.YEAR))
+                                    ec.set(Calendar.MONTH, sc.get(Calendar.MONTH))
+                                    ec.set(Calendar.DAY_OF_MONTH, sc.get(Calendar.DAY_OF_MONTH))
                                 }
+                                val sh = sc.get(Calendar.HOUR_OF_DAY)
+                                val eh = ec.get(Calendar.HOUR_OF_DAY)
+                                if (sh in 0..6 && eh in 0..6) {
+                                    sc.add(Calendar.HOUR_OF_DAY, 12)
+                                    ec.add(Calendar.HOUR_OF_DAY, 12)
+                                } else if (sh >= 12 && eh in 0..6) {
+                                    ec.add(Calendar.HOUR_OF_DAY, 12)
+                                }
+                                out.add(ParseSlot(sc.timeInMillis, ec.timeInMillis,
+                                    "$exp to $exp2", 0.97))
+                                consumed[i] = true
+                                consumed[i+1] = true
+                                i += 2
+                                continue
                             }
                         }
                     }
                 }
+            }
 
             // try merge date-only + time-only (current + next)
             if (hasDateInfo(exp) && !hasTimeInfo(exp) && i+1 < units.size && !consumed[i+1]) {
                 val u2 = units[i+1]
-                val exp2 = u2.getExp()
+                val exp2 = u2.exp
                 if (hasTimeInfo(exp2)) {
                     val dateMillis = tval
-                    val timeMillis = u2.getResolvedTime()
+                    val timeMillis = u2.resolvedTime
                     if (dateMillis != null && timeMillis != null) {
                         val dc = Calendar.getInstance(); dc.timeInMillis = dateMillis
                         val tc = Calendar.getInstance(); tc.timeInMillis = timeMillis
@@ -177,7 +175,8 @@ object TimeNLPAdapter {
                         dc.set(Calendar.HOUR_OF_DAY, hour)
                         dc.set(Calendar.MINUTE, minute)
                         dc.set(Calendar.SECOND, 0)
-                        out.add(ParseSlot(dc.timeInMillis, dc.timeInMillis + 60*60*1000L, exp + " " + exp2, 0.98))
+                        out.add(ParseSlot(dc.timeInMillis, dc.timeInMillis + 60*60*1000L,
+                            "$exp $exp2", 0.98))
                         consumed[i] = true
                         consumed[i+1] = true
                         i += 2
@@ -189,9 +188,9 @@ object TimeNLPAdapter {
             // try merge time-only preceded by date-only (prev)
             if (!hasDateInfo(exp) && hasTimeInfo(exp) && i-1 >= 0 && !consumed[i-1]) {
                 val uPrev = units[i-1]
-                val expPrev = uPrev.getExp()
+                val expPrev = uPrev.exp
                 if (hasDateInfo(expPrev)) {
-                    val dateMillis = uPrev.getResolvedTime()
+                    val dateMillis = uPrev.resolvedTime
                     val timeMillis = tval
                     if (dateMillis != null && timeMillis != null) {
                         val dc = Calendar.getInstance(); dc.timeInMillis = dateMillis
@@ -199,7 +198,8 @@ object TimeNLPAdapter {
                         dc.set(Calendar.HOUR_OF_DAY, tc.get(Calendar.HOUR_OF_DAY))
                         dc.set(Calendar.MINUTE, tc.get(Calendar.MINUTE))
                         dc.set(Calendar.SECOND, 0)
-                        out.add(ParseSlot(dc.timeInMillis, dc.timeInMillis + 60*60*1000L, expPrev + " " + exp, 0.98))
+                        out.add(ParseSlot(dc.timeInMillis, dc.timeInMillis + 60*60*1000L,
+                            "$expPrev $exp", 0.98))
                         consumed[i] = true
                         consumed[i-1] = true
                         i++
@@ -211,8 +211,8 @@ object TimeNLPAdapter {
             // try detect simple range like '3点到5点' or '15:00-17:00'
             if (tval != null && i+1 < units.size && !consumed[i+1]) {
                 val u2 = units[i+1]
-                val exp2 = u2.getExp()
-                val tval2 = u2.getResolvedTime()
+                val exp2 = u2.exp
+                val tval2 = u2.resolvedTime
                 if ((exp.contains("到") || exp.contains("-") || exp.contains("~")) && tval2 != null) {
                     // ensure end inherits date from start if missing
                     val sc = Calendar.getInstance(); sc.timeInMillis = tval
@@ -238,7 +238,7 @@ object TimeNLPAdapter {
                         // if start is already PM and end parsed as small hour, make end PM too
                         ec.add(Calendar.HOUR_OF_DAY, 12)
                     }
-                    out.add(ParseSlot(sc.timeInMillis, ec.timeInMillis, exp + " to " + exp2, 0.97))
+                    out.add(ParseSlot(sc.timeInMillis, ec.timeInMillis, "$exp to $exp2", 0.97))
                     consumed[i] = true
                     consumed[i+1] = true
                     i += 2
@@ -250,12 +250,10 @@ object TimeNLPAdapter {
             if (tval != null) {
                 // handle relative half-hour expressions explicitly when TimeUnit didn't normalize as expected
                 try {
-                    val halfMatch = Regex("(\\d+)\\s*个?半\\s*小时").find(exp)
-                    if (halfMatch != null) {
-                        val n = halfMatch.groupValues[1].toInt()
-                        val millis = baseMinute * 60*1000L * 60 // placeholder (we'll compute properly below)
-                    }
-                } catch (e: Exception) {
+                    // val halfMatch = Regex("(\\d+)\\s*个?半\\s*小时").find(exp)
+//                    if (halfMatch != null) {
+//                    }
+                } catch (_: Exception) {
                     // ignore and fallback
                 }
                 out.add(ParseSlot(tval, tval + 60*60*1000L, exp, 0.9))

@@ -9,10 +9,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.FileProvider
-import org.json.JSONObject
 import org.json.JSONArray
-import java.io.File
+import org.json.JSONObject
 
 class AboutActivity : AppCompatActivity() {
 

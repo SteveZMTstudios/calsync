@@ -1,10 +1,5 @@
 package top.stevezmt.calsync.timenlp.internal;
 
-/**
- * Adapted from Time-NLP RangeTimeEnum.java (subset kept)
- * Semantic mapping from fuzzy period words to representative hour-of-day.
- * This helps convert expressions like "下午" or "晚上" to concrete hours.
- */
 public enum RangeTimeEnum {
     day_break(3),      // 拂晓
     early_morning(8),  // 早晨

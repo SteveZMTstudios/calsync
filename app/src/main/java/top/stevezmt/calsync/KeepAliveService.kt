@@ -1,10 +1,8 @@
 package top.stevezmt.calsync
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
@@ -32,7 +30,7 @@ class KeepAliveService : Service() {
                 builder.setCategory(android.app.Notification.CATEGORY_SERVICE)
             }
             startForeground(NOTIFICATION_ID, builder.build())
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // 如果因为前台类型问题失败，尝试延迟再启动或记录
         }
     }
@@ -45,7 +43,7 @@ class KeepAliveService : Service() {
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val mgr = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             if (mgr.getNotificationChannel(CHANNEL_ID) == null) {
                 val ch = NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_MIN)
                 ch.setShowBadge(false)

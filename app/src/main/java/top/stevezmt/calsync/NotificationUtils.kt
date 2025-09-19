@@ -1,17 +1,19 @@
 package top.stevezmt.calsync
 
-import android.app.*
+import android.Manifest
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
-import android.content.ContentUris
-import android.provider.CalendarContract
+import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.CalendarContract
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import android.content.ClipboardManager
-import android.content.ClipData
-import android.content.BroadcastReceiver
-import android.content.ContextWrapper
 
 object NotificationUtils {
 	const val CHANNEL_CONFIRM = "calsync_confirm"
@@ -53,7 +55,7 @@ object NotificationUtils {
 			.setStyle(NotificationCompat.BigTextStyle().bigText(msg ?: "未知错误"))
 			.setAutoCancel(true)
 			.build()
-		NotificationManagerCompat.from(context).notify(System.currentTimeMillis().toInt(), n)
+		safeNotify(context, System.currentTimeMillis().toInt(), n)
 	}
 
 	/**
@@ -62,14 +64,14 @@ object NotificationUtils {
 	 */
 	fun sendError(context: Context, t: Throwable) {
 		ensureChannels(context)
-		val stack = android.util.Log.getStackTraceString(t)
+		val stack = Log.getStackTraceString(t)
 		val body = (t.message ?: t::class.java.name) + "\n\n" + stack
 
 		// Intent to open MainActivity when tapping the notification
 		val openIntent = Intent(context, MainActivity::class.java).apply {
 			flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
 		}
-		val flags = if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE else PendingIntent.FLAG_UPDATE_CURRENT
+		val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 		val openPi = PendingIntent.getActivity(context, 0xABCDEF, openIntent, flags)
 
 		// Broadcast intent to copy stacktrace to clipboard
@@ -91,26 +93,27 @@ object NotificationUtils {
 			.setAutoCancel(true)
 			.build()
 
-		NotificationManagerCompat.from(context).notify(System.currentTimeMillis().toInt(), n)
+		safeNotify(context, System.currentTimeMillis().toInt(), n)
 	}
 
-	fun sendConfirmation(context: Context, eventId: Long, titleLine: String, content: String, deleteActionLabel: String = "删除事件") {
-		ensureChannels(context)
-		val deleteIntent = Intent(context, EventActionReceiver::class.java).apply {
-			action = EventActionReceiver.ACTION_DELETE_EVENT
-			putExtra(EventActionReceiver.EXTRA_EVENT_ID, eventId)
+	/**
+	 * Safely notify, checking POST_NOTIFICATIONS permission on Android 13+ and catching SecurityException.
+	 */
+	private fun safeNotify(context: Context, id: Int, notification: Notification) {
+		try {
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+				if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+					Log.w("NotificationUtils", "POST_NOTIFICATIONS not granted; skipping notification id=$id")
+					return
+				}
+			}
+			NotificationManagerCompat.from(context).notify(id, notification)
+		} catch (se: SecurityException) {
+			Log.w("NotificationUtils", "SecurityException while posting notification id=$id", se)
+		} catch (t: Throwable) {
+			// Fallback: log unexpected errors but don't crash
+			Log.e("NotificationUtils", "Error while posting notification id=$id", t)
 		}
-		val flags = if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE else PendingIntent.FLAG_UPDATE_CURRENT
-		val pi = PendingIntent.getBroadcast(context, eventId.toInt(), deleteIntent, flags)
-		val n = NotificationCompat.Builder(context, CHANNEL_CONFIRM)
-			.setSmallIcon(R.mipmap.ic_launcher)
-			.setContentTitle(titleLine)
-			.setContentText(content)
-			.setStyle(NotificationCompat.BigTextStyle().bigText(content))
-			.addAction(android.R.drawable.ic_menu_delete, deleteActionLabel, pi)
-			.setAutoCancel(true)
-			.build()
-		NotificationManagerCompat.from(context).notify((eventId % Int.MAX_VALUE).toInt(), n)
 	}
 
 	fun sendEventCreated(context: Context, eventId: Long, startMillis: Long, title: String, location: String?) {
@@ -127,10 +130,10 @@ object NotificationUtils {
 		val viewIntent = Intent(Intent.ACTION_VIEW).apply {
 			data = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId)
 		}
-		val viewFlags = if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE else PendingIntent.FLAG_UPDATE_CURRENT
+		val viewFlags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 		val viewPi = PendingIntent.getActivity(context, eventId.toInt(), viewIntent, viewFlags)
 
-		val flags = if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE else PendingIntent.FLAG_UPDATE_CURRENT
+		val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 		val pi = PendingIntent.getBroadcast(context, (eventId xor 0x777).toInt(), deleteIntent, flags)
 		// Use the confirmation channel for created-event notifications to avoid duplicate channels
 		val n = NotificationCompat.Builder(context, CHANNEL_CONFIRM)
@@ -142,7 +145,7 @@ object NotificationUtils {
 			.setContentIntent(viewPi)
 			.setAutoCancel(true)
 			.build()
-		NotificationManagerCompat.from(context).notify(((eventId shl 1) % Int.MAX_VALUE).toInt(), n)
+		safeNotify(context, ((eventId shl 1) % Int.MAX_VALUE).toInt(), n)
 	}
 
 	fun cancelEventNotifications(context: Context, eventId: Long) {

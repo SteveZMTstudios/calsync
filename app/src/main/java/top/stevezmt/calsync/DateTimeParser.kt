@@ -1,12 +1,14 @@
 package top.stevezmt.calsync
 
 import android.util.Log
-import java.util.*
 import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import java.util.regex.Pattern
 
 object DateTimeParser {
-    private val TAG = "DateTimeParser"
+    private const val TAG = "DateTimeParser"
 
     // Public helper: expose current time used by parser (wall-clock now)
     // Returns current time in milliseconds (Calendar.getInstance())
@@ -23,21 +25,13 @@ object DateTimeParser {
 
     // Patterns for Chinese-style dates/times. These are examples and should be extended.
     // Accept both ASCII colon and fullwidth colon
-    private val colon = "[:：]"
-    private val monthDayPattern = Pattern.compile("(\\d{1,2}|[一二三四五六七八九十百]+)月(\\d{1,2}|[一二三四五六七八九十]+)(?:日|号)?")
-    private val monthDayRangePattern = Pattern.compile("(\\d{1,2}|[一二三四五六七八九十百]+)月(\\d{1,2}|[一二三四五六七八九十]+)(?:日|号)?\\s*[~-至到]+\\s*(\\d{1,2}|[一二三四五六七八九十百]+)月?(\\d{1,2}|[一二三四五六七八九十]+)(?:日|号)?")
+    private const val colon = "[:：]"
+    private val monthDayPattern = Pattern.compile("(\\d{1,2}|[一二三四五六七八九十百]+)月(\\d{1,2}|[一二三四五六七八九十]+)[日号]?")
+    private val monthDayRangePattern = Pattern.compile("(\\d{1,2}|[一二三四五六七八九十百]+)月(\\d{1,2}|[一二三四五六七八九十]+)[日号]?\\s*[~-至到]+\\s*(\\d{1,2}|[一二三四五六七八九十百]+)月?(\\d{1,2}|[一二三四五六七八九十]+)[日号]?")
     // unified time pattern: optional am/pm token, hour (arabic or chinese numerals), optional minute
     // Added 今晚 / 明晚 to capture evening context directly so "今晚8点" 不再被误判为上午 8 点
     private val timePattern = Pattern.compile("(上午|下午|中午|晚上|凌晨|今晚|明晚)?\\s*([0-9]{1,2}|[一二三四五六七八九十百]+)(?:${colon}([0-5]?\\d))?点?")
     private val weekdayTimePattern = Pattern.compile("((?:周|星期)[一二三四五六日天])(?:[上下午]|上午|下午)?\\s*(\\d{1,2})${colon}(\\d{1,2})")
-    // default pattern, but we will allow configurable relative words
-    private val defaultRelativePattern = Pattern.compile("(今天|明天|后天|大后天|今晚|明晚|今日|明日)")
-
-    // Extract the sentence bounded by punctuation that contains a date/time-looking substring
-    fun extractSentenceContainingDate(context: android.content.Context, text: String): String {
-        val list = extractAllSentencesContainingDate(context, text)
-        return if (list.isEmpty()) "" else list.first()
-    }
 
     // Extract ALL sentences (segments bounded by punctuation) that contain date/time-like info
     fun extractAllSentencesContainingDate(context: android.content.Context, text: String): List<String> {
@@ -64,7 +58,7 @@ object DateTimeParser {
         // Countdown style (超星): 还有X天 / 还有X个小时 / 还有X分钟 / 还有X分 / 还有X秒
         if (Regex("还有[一二三四五六七八九十百零0-9]+(个)?天").containsMatchIn(s)
             || Regex("还有[一二三四五六七八九十百零0-9]+(个)?小时").containsMatchIn(s)
-            || Regex("还有[一二三四五六七八九十百零0-9]+(个)?分(?:钟)?").containsMatchIn(s)
+            || Regex("还有[一二三四五六七八九十百零0-9]+(个)?分钟?").containsMatchIn(s)
             || Regex("还有[一二三四五六七八九十百零0-9]+(个)?秒").containsMatchIn(s)) {
             return true
         }
@@ -89,31 +83,6 @@ object DateTimeParser {
 
     // === Public APIs (unchanged signature) ===
     fun parseDateTime(sentence: String): ParseResult? = RuleBasedStrategy.tryParseStandalone(sentence)
-
-    fun parseDateTime(context: android.content.Context, sentence: String): ParseResult? {
-        // Prefer explicit rule-based parsing first (handles tokens like 周五/本周五 reliably).
-        try {
-            val rule = RuleBasedStrategyWithContext(context)
-            val r = rule.tryParse(sentence)
-            if (r != null) return r
-        } catch (e: Exception) {
-            Log.w(TAG, "RuleBaseCtx failed: ${e.message}")
-            try { NotificationUtils.sendError(context, e) } catch (_: Throwable) {}
-        }
-
-        // Fallback to TimeNLP only if enabled and rule-based didn't match
-        if (SettingsStore.isTimeNLPEnabled(context)) {
-            try {
-                val nlp = TimeNLPStrategy(context)
-                val r2 = nlp.tryParse(sentence)
-                if (r2 != null) return r2
-            } catch (e: Exception) {
-                Log.w(TAG, "TimeNLP failed: ${e.message}")
-                try { NotificationUtils.sendError(context, e) } catch (_: Throwable) {}
-            }
-        }
-        return null
-    }
 
     // Overload: allow passing a fixed baseMillis so all calculations in this call share the same "now"
     fun parseDateTime(context: android.content.Context, sentence: String, baseMillis: Long): ParseResult? {
@@ -151,14 +120,14 @@ object DateTimeParser {
     private class TimeNLPStrategy(private val context: android.content.Context): ParsingStrategy {
         override fun name() = "TimeNLP"
         override fun tryParse(sentence: String): ParseResult? {
-            val slots = TimeNLPAdapter.parse(context, sentence)
+            val slots = TimeNLPAdapter.parse(sentence)
             if (slots.isEmpty()) return null
             val s = slots.first()
             val (t, loc) = extractTitleAndLocation(sentence)
             return ParseResult(s.startMillis, s.endMillis, t, loc)
         }
         fun tryParseWithBase(sentence: String, baseMillis: Long): ParseResult? {
-            val slots = TimeNLPAdapter.parse(context, sentence, baseMillis)
+            val slots = TimeNLPAdapter.parse(sentence, baseMillis)
             if (slots.isEmpty()) return null
             val s = slots.first()
             val (t, loc) = extractTitleAndLocation(sentence)
@@ -169,7 +138,8 @@ object DateTimeParser {
     // Original rule-based without context (legacy API)
     private object RuleBasedStrategy: ParsingStrategy {
         override fun name() = "RuleBaseNoCtx"
-        override fun tryParse(sentence: String): ParseResult? = parseDateTimeInternal(sentence, defaultRelativePattern, preferFutureOpt = null)
+        override fun tryParse(sentence: String): ParseResult? = parseDateTimeInternal(sentence,
+            preferFutureOpt = null)
         fun tryParseStandalone(sentence: String) = tryParse(sentence)
     }
 
@@ -180,12 +150,12 @@ object DateTimeParser {
             val map = buildRelativeTokenMap(ctx)
             // read preferFuture tri-state from settings (null=auto, true=prefer future, false=disable)
             val prefer = SettingsStore.getPreferFutureBoolean(ctx)
-            return parseDateTimeInternal(sentence, null, map, baseMillis = null, preferFutureOpt = prefer)
+            return parseDateTimeInternal(sentence, map, baseMillis = null, preferFutureOpt = prefer)
         }
         fun tryParseWithBase(sentence: String, baseMillis: Long): ParseResult? {
             val map = buildRelativeTokenMap(ctx)
             val prefer = SettingsStore.getPreferFutureBoolean(ctx)
-            return parseDateTimeInternal(sentence, null, map, baseMillis, prefer)
+            return parseDateTimeInternal(sentence, map, baseMillis, prefer)
         }
     }
 
@@ -204,7 +174,7 @@ object DateTimeParser {
             var offset = 0
             var ampm: String? = null
             try {
-                if (colonSplit.size >= 1) token = colonSplit[0].substringAfter('"').substringBeforeLast('"').ifBlank { colonSplit[0] }
+                if (colonSplit.isNotEmpty()) token = colonSplit[0].substringAfter('"').substringBeforeLast('"').ifBlank { colonSplit[0] }
                 if (colonSplit.size >= 2) offset = colonSplit[1].split(',')[0].filter { it.isDigit() || it == '-' }.toIntOrNull() ?: 0
                 // find am/pm marker (am/pm) after comma or third part
                 if (colonSplit.size >= 3) {
@@ -237,7 +207,6 @@ object DateTimeParser {
 
     private fun parseDateTimeInternal(
         sentence: String,
-        relativePattern: Pattern?,
         relativeMap: LinkedHashMap<String, RelativeSpec>? = null,
         baseMillis: Long? = null,
         preferFutureOpt: Boolean? = null,
@@ -262,15 +231,12 @@ object DateTimeParser {
 
             // Chaoxing style countdown: 还有24个小时 / 还有2天3小时 / 还有90分钟 / 还有1天2小时30分钟5秒
             // Use a simple, balanced regex to quickly detect countdown phrases (we parse units sequentially below).
-            val countdownRegex = Regex("还有[一二三四五六七八九十百零0-9]+(?:个)?(?:天|小时|分(?:钟)?|秒)")
             // Simpler robust approach: use iterative token extraction
-            val durationToken = Regex("还有([一二三四五六七八九十百零0-9]+)(?:个)?天")
-            val hourToken = Regex("还有|(?<!天)([一二三四五六七八九十百零0-9]+)(?:个)?小时")
             // Instead of a single giant regex (容易错), we parse sequentially.
             if (sentence.contains("还有") && sentence.contains("小时") || sentence.contains("还有") && sentence.contains("天") || sentence.contains("还有") && sentence.contains("分钟") || sentence.contains("还有") && sentence.contains("分") || sentence.contains("还有") && sentence.contains("秒")) {
                 var remain = sentence.substring(sentence.indexOf("还有"))
                 var days = 0; var hours = 0; var minutes = 0; var seconds = 0
-                fun extract(re: Regex, unit: String, assign: (Int)->Unit) {
+                fun extract(re: Regex, assign: (Int)->Unit) {
                     val m = re.find(remain)
                     if (m != null) {
                         val numStr = m.groupValues.filter { it.isNotBlank() }.drop(1).firstOrNull() ?: m.groupValues.getOrNull(1)
@@ -282,10 +248,11 @@ object DateTimeParser {
                         remain = remain.removeRange(idx, end)
                     }
                 }
-                extract(Regex("还有([一二三四五六七八九十百零0-9]+)个?天"), "天") { days = it }
-                extract(Regex("([一二三四五六七八九十百零0-9]+)个?小时"), "小时") { hours = it }
-                extract(Regex("([一二三四五六七八九十百零0-9]+)个?分(?:钟)?"), "分钟") { minutes = it }
-                extract(Regex("([一二三四五六七八九十百零0-9]+)个?秒"), "秒") { seconds = it }
+                extract(Regex("还有([一二三四五六七八九十百零0-9]+)个?天")) { days = it }
+                extract(Regex("([一二三四五六七八九十百零0-9]+)个?小时")) { hours = it }
+                extract(Regex("([一二三四五六七八九十百零0-9]+)个?分" +
+                        "钟?")) { minutes = it }
+                extract(Regex("([一二三四五六七八九十百零0-9]+)个?秒")) { seconds = it }
                 // 还有24个小时 -> days=0 hours=24
                 if (days + hours + minutes + seconds > 0) {
                     Log.d(TAG, "countdown detected: days=$days hours=$hours minutes=$minutes seconds=$seconds")
@@ -585,7 +552,7 @@ object DateTimeParser {
         val directionWord = tailMatcher.value
         val direction = if (directionWord.contains("后") || directionWord.contains("之后") || directionWord.contains("以后")) 1 else -1
         // 抽取单位链
-        val unitRegex = Regex("((?:[一二三四五六七八九十百零两0-9]+)?(?:个)?半|[一二三四五六七八九十百零两0-9]+|半)(?:个)?(年|个月|月|周|星期|天|日|小时|分钟|分|秒)")
+        val unitRegex = Regex("((?:[一二三四五六七八九十百零两0-9]+)?个?半|[一二三四五六七八九十百零两0-9]+|半)个?(年|个月|月|周|星期|天|日|小时|分钟|分|秒)")
         val segment = sentence.substring(0, tailMatcher.range.first + tailMatcher.value.length)
         val matches = unitRegex.findAll(segment).toList()
         if (matches.isEmpty()) return null
@@ -603,8 +570,6 @@ object DateTimeParser {
         }
         for (m in matches) {
             val full = m.value
-            val numberPart = full.dropLastWhile { it in listOf('年','月','周','星','期','天','日','小','时','分','钟','秒') }. // naive, we recompute properly below
-                replace(Regex("(年|个月|月|周|星期|天|日|小时|分钟|分|秒)"), "")
             val unit = m.groupValues.lastOrNull { it.isNotBlank() && it.any { c -> c !in '0'..'9' } } ?: continue
             val value = when {
                 full.startsWith("半") -> 0.5
@@ -737,7 +702,7 @@ object DateTimeParser {
         }
 
         // title heuristics: look for verb + noun patterns
-        val verbNoun = Regex("(开展|举办|召集|报名|招募|招|进行|开展|开展本学期第一次|开展本学期第一次|通知|请|组织|召开|申请|发起|开展本学期第一次)([\u4e00-\u9fa5A-Za-z0-9]{1,20})")
+        val verbNoun = Regex("(举办|召集|报名|招募|招|进行|开展|通知|请|组织|召开|申请|发起|开展本学期第一次)([一-龥A-Za-z0-9]{1,20})")
         val vn = verbNoun.find(sentence)
         if (vn != null) {
             val noun = vn.groupValues.getOrNull(2)
@@ -760,7 +725,7 @@ object DateTimeParser {
         // fallback: try extract short meaningful phrase before location or before time
         if (title == null) {
             // remove leading polite tokens and mentions
-            var s = sentence.replace(Regex("@全体成员|@所有人|请大家|各位|各位同学|各位老师|各位班主任|各位学委"), "")
+            val s = sentence.replace(Regex("@全体成员|@所有人|请大家|各位|各位同学|各位老师|各位班主任|各位学委"), "")
             // split by punctuation and newlines
             val parts = s.split(Regex("[，,。.!！?？；;\\n\\r]"))
             for (p in parts) {
@@ -769,9 +734,9 @@ object DateTimeParser {
                     // if contains a location marker, skip as title
                     if (Regex("地点|地址|时间|时间：|时间:").containsMatchIn(cleaned)) continue
                     // if contains date/time, skip
-                    if (Regex("\\d{1,2}[:：\\.]\\d{1,2}|上午|下午|中午|晚上|明天|后天|今天|周|星期").containsMatchIn(cleaned)) {
-                        // still might contain title before time, try split by spaces
-                    }
+//                    if (Regex("\\d{1,2}[:：\\.]\\d{1,2}|上午|下午|中午|晚上|明天|后天|今天|周|星期").containsMatchIn(cleaned)) {
+//                        // still might contain title before time, try split by spaces
+//                    }
                     title = cleaned.take(40)
                     break
                 }
@@ -807,10 +772,10 @@ object DateTimeParser {
                 if (lastEnd >= 0 && lastEnd < sentence.length - 1) {
                     var tail = sentence.substring(lastEnd).trim()
                     // drop leading connectors
-                    tail = tail.replaceFirst(Regex("^[\\\"::：\\-\\—\\s]*(为|是|为期|：|:)") , "").trim()
+                    tail = tail.replaceFirst(Regex("^[\":：\\-—\\s]*(为|是|为期|：|:)") , "").trim()
                     // cut at punctuation
                     tail = tail.split(Regex("[，,。.!！?？；;\\n\\r]"))[0].trim()
-                    if (tail.length in 2..60 && !Regex("\\d{1,2}[:：\\.]\\d{1,2}|上午|下午|中午|晚上|明天|后天|今天|周|星期").containsMatchIn(tail)) {
+                    if (tail.length in 2..60 && !Regex("\\d{1,2}[:：.]\\d{1,2}|上午|下午|中午|晚上|明天|后天|今天|周|星期").containsMatchIn(tail)) {
                         title = tail.take(60)
                     }
                 }
@@ -830,10 +795,12 @@ object DateTimeParser {
             // Evening / night contexts
             a.contains("下午") || a.contains("PM", true) || a.contains("晚") || a.contains("今晚") || a.contains("明晚") -> if (hour < 12) hour + 12 else hour
             // Early morning contexts: 凌晨 1/2/3/4/5 点 属于 0~5 点; 若写 12 凌晨则 interpret 为 0
-            a.contains("凌晨") -> when {
-                hour == 12 -> 0
-                hour in 1..5 -> hour // keep 1~5
-                else -> hour // others unchanged
+            a.contains("凌晨") -> when (hour) {
+                12 -> 0
+                in 1..5 -> hour
+                // keep 1~5
+                else -> hour
+                // others unchanged
             }
             a.contains("上午") || a.contains("AM", true) || a.contains("早") -> if (hour == 12) 0 else hour
             else -> hour

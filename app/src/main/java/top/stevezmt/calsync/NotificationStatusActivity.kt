@@ -1,5 +1,7 @@
 package top.stevezmt.calsync
 
+import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -8,9 +10,8 @@ import android.text.method.ScrollingMovementMethod
 import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import android.app.NotificationManager
 import androidx.core.app.NotificationManagerCompat
-import android.content.ComponentName
+import androidx.core.net.toUri
 
 class NotificationStatusActivity : AppCompatActivity() {
     private lateinit var statusView: TextView
@@ -42,7 +43,7 @@ class NotificationStatusActivity : AppCompatActivity() {
                     intent.putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
                 } else {
                     intent.action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
-                    intent.data = android.net.Uri.parse("package:$packageName")
+                    intent.data = "package:$packageName".toUri()
                 }
                 startActivity(intent)
             } catch (e: Exception) {
@@ -92,11 +93,16 @@ class NotificationStatusActivity : AppCompatActivity() {
             // Check our channels
             val channels = listOf(NotificationUtils.CHANNEL_CONFIRM, NotificationUtils.CHANNEL_ERROR)
             for (ch in channels) {
-                val c = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) nm?.getNotificationChannel(ch) else null
-                if (c != null) {
-                    appendLine("channel=${c.id} importance=${c.importance} name=${c.name} showBadge=${c.canShowBadge()}")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val c = nm?.getNotificationChannel(ch)
+                    if (c != null) {
+                        appendLine("channel=${c.id} importance=${c.importance} name=${c.name} showBadge=${c.canShowBadge()}")
+                    } else {
+                        appendLine("channel=$ch not found")
+                    }
                 } else {
-                    appendLine("channel=$ch not found")
+                    // Notification channels are not available before API 26
+                    appendLine("channel=$ch not supported (SDK < 26)")
                 }
             }
             appendLine("\n--- 最近收到的通知 (最多 ${NotificationCache.snapshot().size}) ---")
@@ -117,7 +123,7 @@ class NotificationStatusActivity : AppCompatActivity() {
             val me = ComponentName(this, NotificationMonitorService::class.java)
             val meFlat = me.flattenToString()
             return flat.split(':').any { it.equals(meFlat, ignoreCase = true) }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             return false
         }
     }

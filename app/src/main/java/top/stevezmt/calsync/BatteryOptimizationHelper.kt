@@ -9,7 +9,6 @@ import android.os.PowerManager
 import android.content.ActivityNotFoundException
 import android.provider.Settings
 import android.util.Log
-import android.widget.Toast
 
 /**
  * 电池优化助手类

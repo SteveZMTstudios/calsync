@@ -14,7 +14,7 @@ class DebugTimeParsingTest {
         set(Calendar.MILLISECOND, 0)
     }
 
-    private fun parseSlots(text: String) = TimeNLPAdapter.parse(DateTimeParserTest.DummyContext, text, baseCal.timeInMillis)
+    private fun parseSlots(text: String) = TimeNLPAdapter.parse(text, baseCal.timeInMillis)
 
     @Test
     fun dumpSamples() {

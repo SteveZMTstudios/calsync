@@ -1,10 +1,8 @@
 package top.stevezmt.calsync
 
 import android.Manifest
-import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Button
@@ -49,27 +47,36 @@ class SettingsActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
         keywordsEdit = findViewById(R.id.edit_keywords)
-    radioGroupPreferFuture = findViewById(R.id.radio_prefer_future)
-    radioAuto = findViewById(R.id.radio_auto)
-    radioPrefer = findViewById(R.id.radio_prefer)
-    radioDisable = findViewById(R.id.radio_disable)
-    saveBtn = findViewById(R.id.btn_save)
+        radioGroupPreferFuture = findViewById(R.id.radio_prefer_future)
+        radioAuto = findViewById(R.id.radio_auto)
+        radioPrefer = findViewById(R.id.radio_prefer)
+        radioDisable = findViewById(R.id.radio_disable)
+        saveBtn = findViewById(R.id.btn_save)
         permBtn = findViewById(R.id.btn_request_permission)
         notifyBtn = findViewById(R.id.btn_open_notification_access)
         relativeWordsEdit = findViewById(R.id.edit_relative_words)
         customRulesEdit = findViewById(R.id.edit_custom_rules)
-    // try to locate optional button id without referencing a missing R.id constant
-    val selectAppId = resources.getIdentifier("btn_select_app", "id", packageName) // legacy single-select id if exists
-    selectAppBtn = if (selectAppId != 0) findViewById(selectAppId) else null
-    selectAppsBtn = findViewById(R.id.btn_select_apps)
-    selectedAppsText = findViewById(R.id.text_selected_apps)
-    fillRuleTemplateBtn = findViewById(R.id.btn_fill_rule_template)
-    resetRelativeWordsBtn = findViewById(R.id.btn_reset_relative_words)
-    updateSelectedAppsSummary()
+        // try to locate optional button id without crashing if it's absent in newer layouts
+        // Use reflection to read the generated R.id.<name> field at runtime so we don't
+        // reference a missing R.id constant at compile time.
+        selectAppBtn = try {
+            val rIdClass = Class.forName("${packageName}.R\$id")
+            val field = rIdClass.getField("btn_select_app")
+            val id = field.getInt(null)
+            findViewById(id)
+        } catch (_: Exception) {
+            // If the id/class/field doesn't exist in this build variant/layout, keep null
+            null
+        }
+        selectAppsBtn = findViewById(R.id.btn_select_apps)
+        selectedAppsText = findViewById(R.id.text_selected_apps)
+        fillRuleTemplateBtn = findViewById(R.id.btn_fill_rule_template)
+        resetRelativeWordsBtn = findViewById(R.id.btn_reset_relative_words)
+        updateSelectedAppsSummary()
 
-    keywordsEdit.setText(SettingsStore.getKeywords(this).joinToString(","))
-    relativeWordsEdit.setText(SettingsStore.getRelativeDateWords(this).joinToString(","))
-    customRulesEdit.setText(SettingsStore.getCustomRules(this).joinToString(","))
+        keywordsEdit.setText(SettingsStore.getKeywords(this).joinToString(","))
+        relativeWordsEdit.setText(SettingsStore.getRelativeDateWords(this).joinToString(","))
+        customRulesEdit.setText(SettingsStore.getCustomRules(this).joinToString(","))
 
         // initialize preferFuture radio selection
         try {
@@ -140,7 +147,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         selectAppsBtn?.setOnClickListener {
-            startActivity(android.content.Intent(this, AppPickerActivity::class.java))
+            startActivity(Intent(this, AppPickerActivity::class.java))
         }
 
         fillRuleTemplateBtn?.setOnClickListener {
@@ -170,18 +177,14 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun requestCalendarPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            requestCalendarPermission.launch(Manifest.permission.WRITE_CALENDAR)
-        } else {
-            Toast.makeText(this, "Android 版本不需要运行时权限", Toast.LENGTH_SHORT).show()
-        }
+        requestCalendarPermission.launch(Manifest.permission.WRITE_CALENDAR)
     }
 
     private fun openNotificationAccessSettings() {
         // Opens the Notification Listener Settings screen
         try {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // fallback: open app details
             val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
             val uri: Uri = Uri.fromParts("package", packageName, null)

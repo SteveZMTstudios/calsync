@@ -1,23 +1,24 @@
 package top.stevezmt.calsync
 
-import android.app.Application
-import android.util.Log
 import android.app.Activity
+import android.app.Application
 import android.os.Bundle
+import android.util.Log
 import android.view.View
+import androidx.core.view.isNotEmpty
 
 class CalSyncApp : Application() {
     override fun onCreate() {
         super.onCreate()
         // Register a lifecycle callback to apply top inset padding to each activity's content view
-        registerActivityLifecycleCallbacks(object: Application.ActivityLifecycleCallbacks {
+        registerActivityLifecycleCallbacks(object: ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
                 try {
                     val content = activity.findViewById<View>(android.R.id.content)
                     // content is a FrameLayout whose first child is the activity's root view; apply on it
-                    val root = if (content is android.view.ViewGroup && content.childCount > 0) content.getChildAt(0) else content
+                    val root = if (content is android.view.ViewGroup && content.isNotEmpty()) content.getChildAt(0) else content
                     root?.let { InsetsHelper.applyTopInsetOnce(it) }
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     // ignore
                 }
             }
@@ -34,7 +35,7 @@ class CalSyncApp : Application() {
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
             try {
                 // Persist stack to a file to survive intent size limits and allow cross-process read
-                val stack = android.util.Log.getStackTraceString(e)
+                val stack = Log.getStackTraceString(e)
                 val msg = "${e.javaClass.simpleName}: ${e.message}\n\n$stack"
                 try { Log.e("CalSync", "Uncaught exception in thread ${t.name}", e) } catch (_: Throwable) {}
                 try {
