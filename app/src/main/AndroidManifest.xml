@@ -45,6 +45,11 @@
             android:label="设置">
         </activity>
 
+        <activity android:name="top.stevezmt.calsync.AboutActivity"
+            android:exported="true"
+            android:label="关于">
+        </activity>
+
         <activity android:name="top.stevezmt.calsync.AppPickerActivity" android:exported="false" android:label="选择应用" />
 
         <activity android:name="top.stevezmt.calsync.MainActivity"
@@ -73,16 +78,15 @@
     <!-- Receiver to support copy-to-clipboard action from error notifications -->
     <receiver android:name="top.stevezmt.calsync.ErrorNotificationReceiver" android:exported="false" />
 
-        <!-- Crash notifier runs in a separate lightweight process so the notification can be posted
-             even if the main app process just crashed. It is not exported. -->
-        <receiver
-            android:name="top.stevezmt.calsync.CrashNotifierReceiver"
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
             android:exported="false"
-            android:process=":crashhelper">
-            <intent-filter>
-                <action android:name="top.stevezmt.calsync.ACTION_SHOW_CRASH" />
-            </intent-filter>
-        </receiver>
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- Debug receiver disabled (non-exported) for safety. -->
         <receiver android:name="top.stevezmt.calsync.DebugCommandReceiver" android:exported="false">

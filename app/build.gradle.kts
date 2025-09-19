@@ -42,7 +42,7 @@ dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
-    // Removed Material library to use basic widgets only
+    implementation(libs.material)
     // jieba for chinese segmentation to improve title extraction
     implementation("com.huaban:jieba-analysis:1.0.2")
     testImplementation(libs.junit)

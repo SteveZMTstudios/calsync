@@ -14,9 +14,10 @@ import android.widget.Switch
 import android.app.AlertDialog
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-// Removed Material components to use basic widgets
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.drawerlayout.widget.DrawerLayout
+import com.google.android.material.navigation.NavigationView
 
 class MainActivity : AppCompatActivity() {
 
@@ -31,12 +32,25 @@ class MainActivity : AppCompatActivity() {
     private lateinit var keepAliveSwitch: Switch
     private lateinit var refreshNotificationServiceBtn: Button
     private lateinit var batteryOptimizationBtn: Button
+    private lateinit var drawerLayout: DrawerLayout
+    private lateinit var navView: NavigationView
 
     private val requestCalendarPermission = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { map ->
         val granted = map.values.all { it }
         Toast.makeText(this, if (granted) "日历权限已授予" else "日历权限缺失", Toast.LENGTH_SHORT).show()
+    }
+
+    override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
+        return when (item.itemId) {
+            android.R.id.home -> {
+                // Open navigation drawer when menu/home button is pressed
+                drawerLayout.openDrawer(navView)
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
     }
 
     override fun onBackPressed() {
@@ -71,6 +85,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        // Enable menu button on the left side of the app bar (same place as back button)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.setHomeAsUpIndicator(R.drawable.menu_24)
 
         
 
@@ -107,10 +124,35 @@ class MainActivity : AppCompatActivity() {
         batteryOptimizationBtn = findViewById(R.id.btn_battery_optimization)
         batteryOptimizationBtn.setOnClickListener { requestIgnoreBatteryOptimizations() }
 
-    updateCalendarIndicator()
+        drawerLayout = findViewById(R.id.drawer_layout)
+        navView = findViewById(R.id.nav_view)
 
-    // 直接使用布局内的 Toolbar（不将其设置为 ActionBar，以避免与 window decor 冲突）
-    // toolbar removed in basic layout
+        // Populate nav header title and version dynamically
+        try {
+            val header = navView.getHeaderView(0)
+            val titleView = header.findViewById<android.widget.TextView>(R.id.nav_header_title)
+            val versionView = header.findViewById<android.widget.TextView>(R.id.nav_header_version)
+            titleView?.text = getString(R.string.app_name)
+            val pkgInfo = packageManager.getPackageInfo(packageName, 0)
+            versionView?.text = "版本 ${pkgInfo.versionName}"
+        } catch (_: Exception) {}
+
+        // Set up navigation view item selection
+        navView.setNavigationItemSelectedListener { menuItem ->
+            when (menuItem.itemId) {
+                R.id.nav_settings -> {
+                    startActivity(Intent(this, SettingsActivity::class.java))
+                    drawerLayout.closeDrawers()
+                    true
+                }
+                R.id.nav_about -> {
+                    startActivity(Intent(this, AboutActivity::class.java))
+                    drawerLayout.closeDrawers()
+                    true
+                }
+                else -> false
+            }
+        }
 
     requestCalendarRuntime()
 
@@ -232,7 +274,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun requestCalendarRuntime() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            requestCalendarPermission.launch(arrayOf(Manifest.permission.WRITE_CALENDAR, Manifest.permission.READ_CALENDAR))
+            val perms = mutableListOf<String>().apply {
+                add(Manifest.permission.WRITE_CALENDAR)
+                add(Manifest.permission.READ_CALENDAR)
+                if (Build.VERSION.SDK_INT >= 33) add(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+            requestCalendarPermission.launch(perms.toTypedArray())
         }
     }
 
