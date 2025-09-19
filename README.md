@@ -53,3 +53,29 @@ tarSDK: 36
 - Gradle 8.10+
 - Android SDK（API 21+）
 
+### 克隆项目
+```bash
+git clone https://github.com/yourusername/calsync.git
+cd calsync
+```
+
+### 构建项目
+```bash
+GRADLE_OPTS="-Xmx3g" ./gradlew assembleRelease
+# lint尚未完善，./gradlew build 无法编译
+```
+
+### 运行测试
+```bash
+./gradlew test
+```
+
+## 鸣谢
+
+https://github.com/NagiYan/TimeNLP
+https://github.com/xkzhangsan/xk-time
+https://github.com/huaban/jieba-analysis
+
+## 许可证
+
+GPL-3.0 License. 详情见 [LICENSE](LICENSE) 文件。

@@ -1,0 +1,132 @@
+name: Android Build and Release
+
+on:
+  workflow_dispatch:
+    inputs: {}
+
+jobs:
+  build:
+    name: Build APKs and publish Release
+    runs-on: ubuntu-latest
+    env:
+      JAVA_HOME_21_X64: /usr/lib/jvm/java-21-openjdk-amd64
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper/
+          key: gradle-cache-${{ runner.os }}-v1
+
+      - name: Ensure Gradle wrapper version
+        run: |
+          ./gradlew --version || true
+          # If you want to force wrapper update add a step to set distributionUrl in gradle/wrapper/gradle-wrapper.properties
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Build Debug APK
+        run: |
+          # Set JVM max heap via GRADLE_OPTS to avoid shell/PowerShell parsing issues with -Porg.gradle.jvmargs
+          GRADLE_OPTS="-Xmx3g" ./gradlew assembleDebug
+
+      - name: Build Release APK
+        run: |
+          # Set JVM max heap via GRADLE_OPTS to avoid shell/PowerShell parsing issues with -Porg.gradle.jvmargs
+          GRADLE_OPTS="-Xmx3g" ./gradlew assembleRelease
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p release_artifacts
+          # Paths from the repo
+          DEBUG_APK=app/build/outputs/apk/debug/app-debug.apk
+          RELEASE_APK=app/release/app-release.apk
+          # Copy the same APK to ABI-labeled files. If your project generates ABI-specific APKs, replace these with the real files.
+          if [ -f "$DEBUG_APK" ]; then
+            cp "$DEBUG_APK" release_artifacts/app-debug-universe.apk
+            cp "$DEBUG_APK" release_artifacts/app-debug-arm.apk
+            cp "$DEBUG_APK" release_artifacts/app-debug-arm64.apk
+          else
+            echo "Debug APK not found at $DEBUG_APK" && ls -R app/build/outputs || exit 1
+          fi
+
+          if [ -f "$RELEASE_APK" ]; then
+            cp "$RELEASE_APK" release_artifacts/app-release-universe.apk
+            cp "$RELEASE_APK" release_artifacts/app-release-arm.apk
+            cp "$RELEASE_APK" release_artifacts/app-release-arm64.apk
+          else
+            echo "Release APK not found at $RELEASE_APK" && ls -R app || exit 1
+          fi
+
+      - name: Create GitHub Release (or update)
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: release-${{ github.run_id }}
+          name: "Build ${{ github.run_number }}"
+          body: |
+            Automated build artifacts for run ${{ github.run_id }}.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Skip turnstyle (not required)
+        run: echo "Skipping turnstyle wrapper; uploading directly using upload-release-asset"
+
+      - name: Upload APKs to release
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: release_artifacts/app-debug-arm.apk
+          asset_name: app-debug-arm.apk
+          asset_content_type: application/vnd.android.package-archive
+
+      - name: Upload APKs to release (arm64)
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: release_artifacts/app-debug-arm64.apk
+          asset_name: app-debug-arm64.apk
+          asset_content_type: application/vnd.android.package-archive
+
+      - name: Upload APKs to release (universe debug)
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: release_artifacts/app-debug-universe.apk
+          asset_name: app-debug-universe.apk
+          asset_content_type: application/vnd.android.package-archive
+
+      - name: Upload Release APKs (arm)
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: release_artifacts/app-release-arm.apk
+          asset_name: app-release-arm.apk
+          asset_content_type: application/vnd.android.package-archive
+
+      - name: Upload Release APKs (arm64)
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: release_artifacts/app-release-arm64.apk
+          asset_name: app-release-arm64.apk
+          asset_content_type: application/vnd.android.package-archive
+
+      - name: Upload Release APKs (universe)
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: release_artifacts/app-release-universe.apk
+          asset_name: app-release-universe.apk
+          asset_content_type: application/vnd.android.package-archive
