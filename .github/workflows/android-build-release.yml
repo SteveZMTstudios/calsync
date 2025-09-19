@@ -77,7 +77,7 @@ jobs:
             echo "Release APK not found at $RELEASE_APK" && ls -R app || exit 1
           fi
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release (use Gradle version, commit history and commit id)
         id: create_release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -122,7 +122,7 @@ jobs:
           echo "${RESPONSE}" | jq .
 
           # 5) 从响应中取 upload_url 并导出为步骤输出，供后续 upload-release-asset 使用
-          UPLOAD_URL=$(echo "${RESPONSE}" | jq -r .upload_url // empty)
+          UPLOAD_URL=$(echo "${RESPONSE}" | jq -r '.upload_url // empty')
           if [ -z "$UPLOAD_URL" ] || [ "$UPLOAD_URL" = "null" ]; then
             echo "Failed to create release or upload_url missing. Full response above."
             exit 1
