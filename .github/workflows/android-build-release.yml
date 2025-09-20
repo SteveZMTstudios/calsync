@@ -118,14 +118,11 @@ jobs:
             ls -R app/build || true
           fi
 
-      - name: Create GitHub Release (use Gradle version, commit history and commit id)
-        id: create_release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compute release metadata
+        id: meta
         run: |
           set -euo pipefail
-
-          # 1) 获取版本号（优先：app/build.gradle -> app/build.gradle.kts -> gradle.properties）
+          # Derive version (Gradle file preferred, fallback to properties)
           VERSION=""
           if [ -f app/build.gradle ]; then
             VERSION=$(grep -m1 "versionName" app/build.gradle | sed -E "s/.*versionName[[:space:]]+['\"]([^'\"]+)['\"].*/\1/" || true)
@@ -133,58 +130,31 @@ jobs:
           if [ -z "$VERSION" ] && [ -f app/build.gradle.kts ]; then
             VERSION=$(grep -m1 "versionName" app/build.gradle.kts | sed -E "s/.*versionName\\s*=?\\s*\"([^\"]+)\".*/\1/" || true)
           fi
-          if [ -z "$VERSION" ] && [ -f gradle.properties ]; then
-            VERSION=$(grep -m1 -E "^(VERSION_NAME|versionName|VERSION)$" gradle.properties | cut -d'=' -f2- | tr -d '[:space:]' || true)
+            if [ -z "$VERSION" ] && [ -f gradle.properties ]; then
+            VERSION=$(grep -m1 -E "^(VERSION_NAME|versionName|VERSION)=" gradle.properties | cut -d'=' -f2- | tr -d '[:space:]' || true)
           fi
           VERSION=${VERSION:-"build-${GITHUB_RUN_ID}"}
 
-          # 2) commit id（短 sha）和 commit history 作为 body
           COMMIT_ID=$(git rev-parse --short HEAD)
           BODY=$(git log --pretty=format:"%h %ad - %s (%an)" --date=short --no-merges -n 200)
 
-          # 3) 构造 JSON payload（使用 jq 确保正确的 JSON 转义）
-          if ! command -v jq >/dev/null 2>&1; then
-            echo "jq is required but not installed in runner. Exiting."
-            exit 1
-          fi
-          PAYLOAD=$(jq -n --arg tag "${COMMIT_ID}" --arg name "${VERSION}" --arg body "${BODY}" \
-            '{ tag_name: $tag, name: $name, body: $body, draft: false, prerelease: false }')
+          echo "tag_name=${COMMIT_ID}" >> "$GITHUB_OUTPUT"
+          echo "release_name=${VERSION}" >> "$GITHUB_OUTPUT"
+          {
+            echo 'body<<EOF'
+            echo "$BODY"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
 
-          # 4) 调用 GitHub Releases API 创建 release（创建时为最新）
-          RESPONSE=$(curl -s -X POST \
-            -H "Authorization: token ${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "Content-Type: application/json" \
-            -d "${PAYLOAD}" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases")
-
-          # 输出响应以便日志可见
-          echo "GitHub release response:"
-          echo "${RESPONSE}" | jq .
-
-          # 5) 从响应中取 upload_url 并导出为步骤输出，供后续 upload-release-asset 使用
-          UPLOAD_URL=$(echo "${RESPONSE}" | jq -r '.upload_url // empty')
-          if [ -z "$UPLOAD_URL" ] || [ "$UPLOAD_URL" = "null" ]; then
-            echo "Failed to create release or upload_url missing. Full response above."
-            exit 1
-          fi
-          echo "upload_url=${UPLOAD_URL}" >> "$GITHUB_OUTPUT"
-
-      - name: Skip turnstyle (not required)
-        run: echo "Skipping turnstyle wrapper; uploading directly using upload-release-asset"
-
-      - name: Upload Debug APK to release
-        uses: actions/upload-release-asset@v1
+      - name: Create GitHub Release and upload APKs
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: release_artifacts/app-debug.apk
-          asset_name: app-debug.apk
-          asset_content_type: application/vnd.android.package-archive
-
-      - name: Upload Release APK to release
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: release_artifacts/app-release.apk
-          asset_name: app-release.apk
-          asset_content_type: application/vnd.android.package-archive
+          tag_name: ${{ steps.meta.outputs.tag_name }}
+          name: ${{ steps.meta.outputs.release_name }}
+          body: ${{ steps.meta.outputs.body }}
+          fail_on_unmatched_files: false
+          files: |
+            release_artifacts/app-debug.apk
+            release_artifacts/app-release.apk
