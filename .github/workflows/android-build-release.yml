@@ -57,8 +57,8 @@ jobs:
           set -euo pipefail
           if [ -n "${RELEASE_KEYSTORE_BASE64:-}" ]; then
             mkdir -p app/release
-            echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > app/release/release-keystore.jks
-            ls -l app/release/release-keystore.jks
+            echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$PWD/app/release/release-keystore.jks"
+            ls -l "$PWD/app/release/release-keystore.jks"
           else
             echo "RELEASE_KEYSTORE_BASE64 not set; skipping keystore decode"
           fi
@@ -74,16 +74,17 @@ jobs:
           GRADLE_OPTS="-Xmx3g"
 
           # If keystore secret is present but file missing, decode it now (defensive)
-          if [ -n "${RELEASE_KEYSTORE_BASE64:-}" ] && [ ! -f app/release/release-keystore.jks ]; then
+          if [ -n "${RELEASE_KEYSTORE_BASE64:-}" ] && [ ! -f "$PWD/app/release/release-keystore.jks" ]; then
             mkdir -p app/release
-            echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > app/release/release-keystore.jks
-            chmod 600 app/release/release-keystore.jks
+            echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$PWD/app/release/release-keystore.jks"
+            chmod 600 "$PWD/app/release/release-keystore.jks"
           fi
 
           # Build with signing properties if keystore exists and passwords provided
-          if [ -f app/release/release-keystore.jks ] && [ -n "${RELEASE_KEYSTORE_KEY:-}" ] && [ -n "${RELEASE_KEYSTORE_SUBKEY:-}" ]; then
+          STORE_FILE="$PWD/app/release/release-keystore.jks"
+          if [ -f "$STORE_FILE" ] && [ -n "${RELEASE_KEYSTORE_KEY:-}" ] && [ -n "${RELEASE_KEYSTORE_SUBKEY:-}" ]; then
             echo "Keystore found — building signed release APK"
-            ./gradlew assembleRelease -Pandroid.injected.signing.store.file=app/release/release-keystore.jks -Pandroid.injected.signing.store.password="${RELEASE_KEYSTORE_KEY}" -Pandroid.injected.signing.key.password="${RELEASE_KEYSTORE_SUBKEY}" -Pandroid.injected.signing.key.alias=release
+            ./gradlew assembleRelease -Pandroid.injected.signing.store.file="$STORE_FILE" -Pandroid.injected.signing.store.password="${RELEASE_KEYSTORE_KEY}" -Pandroid.injected.signing.key.password="${RELEASE_KEYSTORE_SUBKEY}" -Pandroid.injected.signing.key.alias=release
           else
             echo "No keystore/passwords provided — building release APK without injected signing properties"
             ./gradlew assembleRelease
@@ -96,8 +97,6 @@ jobs:
           # Standard apk paths
           DEBUG_APK=app/build/outputs/apk/debug/app-debug.apk
           RELEASE_APK=app/build/outputs/apk/release/app-release.apk
-          RELEASE_APK_UNSIGN=app/build/outputs/apk/release/app-release-unsigned.apk
-
 
           COPIED=0
           if [ -f "$DEBUG_APK" ]; then
@@ -112,12 +111,6 @@ jobs:
             COPIED=$((COPIED+1))
           else
             echo "Release APK not found at $RELEASE_APK"
-            if [ -f "$RELEASE_APK" ]; then
-              cp "$RELEASE_APK_UNSIGN" release_artifacts/app-release.apk
-              COPIED=$((COPIED+1))
-            else
-              echo "Release APK not found at $RELEASE_APK_UNSIGN"
-            fi
           fi
 
           if [ $COPIED -ne 2 ]; then
@@ -132,6 +125,7 @@ jobs:
         run: |
           set -euo pipefail
 
+          # 1) 获取版本号（优先：app/build.gradle -> app/build.gradle.kts -> gradle.properties）
           VERSION=""
           if [ -f app/build.gradle ]; then
             VERSION=$(grep -m1 "versionName" app/build.gradle | sed -E "s/.*versionName[[:space:]]+['\"]([^'\"]+)['\"].*/\1/" || true)
@@ -144,9 +138,11 @@ jobs:
           fi
           VERSION=${VERSION:-"build-${GITHUB_RUN_ID}"}
 
+          # 2) commit id（短 sha）和 commit history 作为 body
           COMMIT_ID=$(git rev-parse --short HEAD)
           BODY=$(git log --pretty=format:"%h %ad - %s (%an)" --date=short --no-merges -n 200)
 
+          # 3) 构造 JSON payload（使用 jq 确保正确的 JSON 转义）
           if ! command -v jq >/dev/null 2>&1; then
             echo "jq is required but not installed in runner. Exiting."
             exit 1
@@ -154,15 +150,19 @@ jobs:
           PAYLOAD=$(jq -n --arg tag "${COMMIT_ID}" --arg name "${VERSION}" --arg body "${BODY}" \
             '{ tag_name: $tag, name: $name, body: $body, draft: false, prerelease: false }')
 
+          # 4) 调用 GitHub Releases API 创建 release（创建时为最新）
           RESPONSE=$(curl -s -X POST \
             -H "Authorization: token ${GITHUB_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             -H "Content-Type: application/json" \
             -d "${PAYLOAD}" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases")
+
+          # 输出响应以便日志可见
           echo "GitHub release response:"
           echo "${RESPONSE}" | jq .
 
+          # 5) 从响应中取 upload_url 并导出为步骤输出，供后续 upload-release-asset 使用
           UPLOAD_URL=$(echo "${RESPONSE}" | jq -r '.upload_url // empty')
           if [ -z "$UPLOAD_URL" ] || [ "$UPLOAD_URL" = "null" ]; then
             echo "Failed to create release or upload_url missing. Full response above."
