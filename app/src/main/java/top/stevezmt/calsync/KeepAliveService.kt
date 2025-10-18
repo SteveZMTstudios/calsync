@@ -31,7 +31,6 @@ class KeepAliveService : Service() {
             }
             startForeground(NOTIFICATION_ID, builder.build())
         } catch (_: Exception) {
-            // 如果因为前台类型问题失败，尝试延迟再启动或记录
         }
     }
 

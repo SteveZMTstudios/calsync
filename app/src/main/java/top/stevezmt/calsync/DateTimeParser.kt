@@ -673,26 +673,38 @@ object DateTimeParser {
         var title: String? = null
         var location: String? = null
 
-        // location patterns
+        // 先在原文上提取地点，避免清洗时间短语时影响地点关键字识别
+        // 再在去除时间/日期表达后的文本上提取标题
+
+        // 清洗后文本（仅用于标题提取）
+        val cleanedForTitle = removeDateTimePhrases(sentence)
+
+        // location patterns（在原文上）
         val locRegex = Regex("(?:地点|地址|场地|地点：|地点:|位置|集合地点)\\s*[:：]?\\s*([\\u4e00-\\u9fa5A-Za-z0-9\\-—–,，。、\\s]{2,60})")
         val locMatch = locRegex.find(sentence)
         if (locMatch != null) {
             location = locMatch.groupValues.getOrNull(1)?.trim()?.trimEnd('。', '，', ',')
         }
 
-        // Try jieba combined top tokens first (if available) to get concise title phrases
+        // Prefer the improved title extraction with rule heuristics
         try {
-            val combined = JiebaWrapper.combinedTopTokens(sentence, 4)
-            if (!combined.isNullOrBlank()) {
-                title = combined
+            val extracted = JiebaWrapper.extractTitle(cleanedForTitle)
+            if (!extracted.isNullOrBlank()) {
+                title = extracted
             } else {
-                val jiebaCands = JiebaWrapper.nounCandidates(sentence)
-                if (jiebaCands.isNotEmpty()) {
-                    for (c in jiebaCands) {
-                        val cand = c.trim()
-                        if (cand.length in 2..60 && !cand.matches(Regex("^[0-9\\-:年月日点]+$"))) {
-                            title = cand
-                            break
+                // fallback to previous lightweight combination to preserve behavior
+                val combined = JiebaWrapper.combinedTopTokens(cleanedForTitle, 4)
+                if (!combined.isNullOrBlank()) {
+                    title = combined
+                } else {
+                    val jiebaCands = JiebaWrapper.nounCandidates(cleanedForTitle)
+                    if (jiebaCands.isNotEmpty()) {
+                        for (c in jiebaCands) {
+                            val cand = c.trim()
+                            if (cand.length in 2..60 && !cand.matches(Regex("^[0-9\\-:年月日点]+$"))) {
+                                title = cand
+                                break
+                            }
                         }
                     }
                 }
@@ -701,9 +713,26 @@ object DateTimeParser {
             // ignore segmentation errors and continue with heuristics
         }
 
+        // Strengthen: if cleaned sentence contains common event nouns, prefer those (e.g., 班会/会议/考试/答辩/讲座/活动/团课/聚会/晚会)
+        try {
+            val eventPat = Regex("([\\u4e00-\\u9fa5A-Za-z0-9]{0,12}?)(班会|会议|考试|答辩|讲座|活动|团课|聚餐|聚会|晚会)")
+            val match = eventPat.find(cleanedForTitle)
+            if (match != null) {
+                val cand = (match.groupValues.getOrNull(1)?.trim() ?: "") + match.groupValues.getOrNull(2).orEmpty()
+                val c2 = cand.trim().trimEnd('。','，',',','：',':')
+                if (c2.length in 2..40) {
+                    // If current title is absent or doesn't include an event suffix, override with cand
+                    val hasEventSuffix = title?.let { Regex("(班会|会议|考试|答辩|讲座|活动|团课|聚餐|聚会|晚会)").containsMatchIn(it) } ?: false
+                    if (!hasEventSuffix || (c2.length > (title?.length ?: 0) && c2.length <= 40)) {
+                        title = c2
+                    }
+                }
+            }
+        } catch (_: Throwable) {}
+
         // title heuristics: look for verb + noun patterns
         val verbNoun = Regex("(举办|召集|报名|招募|招|进行|开展|通知|请|组织|召开|申请|发起|开展本学期第一次)([一-龥A-Za-z0-9]{1,20})")
-        val vn = verbNoun.find(sentence)
+        val vn = verbNoun.find(cleanedForTitle)
         if (vn != null) {
             val noun = vn.groupValues.getOrNull(2)
             if (!noun.isNullOrBlank()) {
@@ -715,7 +744,7 @@ object DateTimeParser {
         if (title == null) {
             val commonEvents = listOf("开会", "会议", "团课", "大扫除", "志愿者", "报名", "截止", "考试", "活动", "志愿者")
             for (ev in commonEvents) {
-                if (sentence.contains(ev)) {
+                if (cleanedForTitle.contains(ev)) {
                     title = ev
                     break
                 }
@@ -725,7 +754,7 @@ object DateTimeParser {
         // fallback: try extract short meaningful phrase before location or before time
         if (title == null) {
             // remove leading polite tokens and mentions
-            val s = sentence.replace(Regex("@全体成员|@所有人|请大家|各位|各位同学|各位老师|各位班主任|各位学委"), "")
+            val s = cleanedForTitle.replace(Regex("@全体成员|@所有人|请大家|各位|各位同学|各位老师|各位班主任|各位学委"), "")
             // split by punctuation and newlines
             val parts = s.split(Regex("[，,。.!！?？；;\\n\\r]"))
             for (p in parts) {
@@ -754,23 +783,23 @@ object DateTimeParser {
             } catch (_: Exception) {}
         }
 
-        // If still no title, try take substring after last time/date token
+        // If still no title, try take substring after last time/date token（在 cleaned 文本上）
         if (title == null) {
             try {
                 var lastEnd = -1
-                val tm = timePattern.matcher(sentence)
+                val tm = timePattern.matcher(cleanedForTitle)
                 while (tm.find()) lastEnd = maxOf(lastEnd, tm.end())
-                val md = monthDayPattern.matcher(sentence)
+                val md = monthDayPattern.matcher(cleanedForTitle)
                 while (md.find()) lastEnd = maxOf(lastEnd, md.end())
-                val wd = weekdayTimePattern.matcher(sentence)
+                val wd = weekdayTimePattern.matcher(cleanedForTitle)
                 while (wd.find()) lastEnd = maxOf(lastEnd, wd.end())
                 // also consider explicit '开始'/'结束' timestamps
-                val startIdx = sentence.indexOf("开始时间")
-                val endIdx = sentence.indexOf("结束时间")
+                val startIdx = cleanedForTitle.indexOf("开始时间")
+                val endIdx = cleanedForTitle.indexOf("结束时间")
                 if (startIdx >= 0) lastEnd = maxOf(lastEnd, startIdx)
                 if (endIdx >= 0) lastEnd = maxOf(lastEnd, endIdx)
-                if (lastEnd >= 0 && lastEnd < sentence.length - 1) {
-                    var tail = sentence.substring(lastEnd).trim()
+                if (lastEnd >= 0 && lastEnd < cleanedForTitle.length - 1) {
+                    var tail = cleanedForTitle.substring(lastEnd).trim()
                     // drop leading connectors
                     tail = tail.replaceFirst(Regex("^[\":：\\-—\\s]*(为|是|为期|：|:)") , "").trim()
                     // cut at punctuation
@@ -786,6 +815,46 @@ object DateTimeParser {
         title = title?.trim()?.trimEnd('。', '，', ',', ':', '：')
         location = location?.trim()?.trimEnd('。', '，', ',')
         return Pair(title, location)
+    }
+
+    // 移除文本中的时间/日期/相对日期/倒计时等短语，只保留用于标题提取的“语义剩余”
+    private fun removeDateTimePhrases(sentence: String): String {
+        var s = sentence
+        fun rm(re: Regex) { s = re.replace(s, " ") }
+        fun rmAll(pattern: Pattern) { s = pattern.matcher(s).replaceAll(" ") }
+
+        // 1) 显式开始/结束时间戳
+        rm(Regex("开始(?:时间)?\\s*[:：]\\s*\\d{4}-\\d{1,2}-\\d{1,2}\\s*[0-2]?\\d[:：][0-5]\\d"))
+        rm(Regex("结束(?:时间)?\\s*[:：]\\s*\\d{4}-\\d{1,2}-\\d{1,2}\\s*[0-2]?\\d[:：][0-5]\\d"))
+
+        // 2) 月日范围、月日、周几时间、纯时间
+        rmAll(monthDayRangePattern)
+        rmAll(monthDayPattern)
+        rmAll(weekdayTimePattern)
+        rmAll(timePattern)
+
+        // 3) 时间范围：3点到5点 / 7:30-9:00
+        val colonClass = "[:：]"
+        rm(Regex("([0-9一二三四五六七八九十]{1,2})(?:$colonClass([0-5]?\\d))?点?\\s*(?:到|至|-)\\s*([0-9一二三四五六七八九十]{1,2})(?:$colonClass([0-5]?\\d))?点?"))
+
+        // 4) 相对时间：X天/小时/分钟/秒 后/前
+        rm(Regex("(还有)?[一二三四五六七八九十百零两0-9个半半]+(年|个月|月|周|星期|天|日|小时|分钟|分|秒)([一二三四五六七八九十百零两0-9个半半]*(年|个月|月|周|星期|天|日|小时|分钟|分|秒))*\\s*(后|之前|以后|之后|前)"))
+        // Chaoxing 倒计时：还有X天/小时/分钟/秒
+        rm(Regex("还有[一二三四五六七八九十百零两0-9个半半]+(天|个?小时|个?分钟|分|个?秒)"))
+
+        // 5) 本周/下周/这周 + 周几
+        rm(Regex("(?:本周|这周|下周)(?:[一二三四五六日天])?"))
+
+        // 6) 单独相对词：今天/明天/后天/大后天/今晚/明晚/今早/明早/中午/下午/上午/晚上/凌晨
+        rm(Regex("今天|明天|后天|大后天|今晚|明晚|今早|明早|中午|下午|上午|晚上|凌晨|本周|这周|下周"))
+
+        // 7) 清理多余空白和分隔符
+        s = s.replace(Regex("[\t\r\n]+"), " ")
+            .replace(Regex("\u3000+"), " ")
+        s = s.replace(Regex("\\s{2,}"), " ").trim()
+        // 去掉可能留下的孤立标点
+        s = s.replace(Regex("^[，,。:：;；]+"), "").replace(Regex("[，,。:：;；]+$"), "")
+        return s
     }
 
     private fun adjustHourByAmPm(hour: Int, ampm: String?): Int {
