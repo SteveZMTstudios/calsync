@@ -1,7 +1,7 @@
 
 <div align="center">
 
-![](app\src\main\res\mipmap-xxxhdpi\ic_launcher_round.webp)
+![](app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp)
 
 # 通知日历同步
 通过监听来自工作和社交APP的通知，将事件登记到您的日历中。
@@ -21,15 +21,9 @@
 
 需要 Android 6.0 或更高版本。
 
-<div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;max-width:100%;">
-  <iframe 
-    src="//player.bilibili.com/player.html?isOutside=true&aid=115399312086930&bvid=BV1srsFzQE3t&cid=33205783366&p=1"
-    title="Bilibili 视频"
-    scrolling="no"
-    allowfullscreen="true"
-    style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;">
-  </iframe>
-</div>
+<!-- <video src="https://sharepoint.cf.stevezmt.top/cdn/assets/self/calsync-intro.mp4" style="max-width:100%;height:auto" controls autoplay>
+  您的浏览器不支持 video 标签。</video> -->
+<video src="https://sharepoint.cf.stevezmt.top/cdn/assets/self/calsync-intro.mp4" controls="controls" width="500" height="300"></video>
 
 <details>
 <summary>详细信息</summary>
