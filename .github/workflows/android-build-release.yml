@@ -2,7 +2,12 @@ name: Android Build and Release
 
 on:
   workflow_dispatch:
-    inputs: {}
+    inputs:
+      release_notes:
+        description: '发布注释（可选，支持多行）'
+        required: false
+        default: ''
+        type: string
 
 env:
  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -120,6 +125,8 @@ jobs:
 
       - name: Compute release metadata
         id: meta
+        env:
+          RELEASE_NOTES: ${{ github.event.inputs.release_notes }}
         run: |
           set -euo pipefail
           # Derive version (Gradle file preferred, fallback to properties)
@@ -136,9 +143,31 @@ jobs:
           VERSION=${VERSION:-"build-${GITHUB_RUN_ID}"}
 
           COMMIT_ID=$(git rev-parse --short HEAD)
-          BODY=$(git log --pretty=format:"%h %ad - %s (%an)" --date=short --no-merges -n 200)
+          # Ensure tag name is version with a leading 'v' (e.g., v0.0.1)
+          case "$VERSION" in
+            v*|V*) TAG_NAME="$VERSION" ;;
+            *) TAG_NAME="v$VERSION" ;;
+          esac
 
-          echo "tag_name=${COMMIT_ID}" >> "$GITHUB_OUTPUT"
+          # If the tag already exists on remote, append numeric suffix .1/.2/.../.99
+          ORIGINAL_TAG="$TAG_NAME"
+          if git ls-remote --tags origin "refs/tags/${TAG_NAME}" | grep -q .; then
+            for i in $(seq 1 99); do
+              CANDIDATE_TAG="${ORIGINAL_TAG}.${i}"
+              if ! git ls-remote --tags origin "refs/tags/${CANDIDATE_TAG}" | grep -q .; then
+                TAG_NAME="$CANDIDATE_TAG"
+                break
+              fi
+            done
+          fi
+          # Prefer user-provided release notes from workflow dispatch input; fallback to git log
+          if [ -n "${RELEASE_NOTES:-}" ]; then
+            BODY="$RELEASE_NOTES"
+          else
+            BODY=$(git log --pretty=format:"%h %ad - %s (%an)" --date=short --no-merges -n 200)
+          fi
+
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
           echo "release_name=${VERSION}" >> "$GITHUB_OUTPUT"
           {
             echo 'body<<EOF'
