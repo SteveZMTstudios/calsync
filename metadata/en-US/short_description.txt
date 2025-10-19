@@ -1,0 +1,1 @@
+Sync notification time info to calendar automatically
