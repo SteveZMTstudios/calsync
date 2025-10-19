@@ -190,7 +190,12 @@ class MainActivity : AppCompatActivity() {
         super.onStart()
         try {
             val f = android.content.IntentFilter(NotificationUtils.ACTION_EVENT_CREATED)
-            registerReceiver(eventCreatedReceiver, f)
+            androidx.core.content.ContextCompat.registerReceiver(
+                this,
+                eventCreatedReceiver,
+                f,
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+            )
         } catch (_: Throwable) {}
     }
 

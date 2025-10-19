@@ -1,5 +1,6 @@
 package top.stevezmt.calsync
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
@@ -8,6 +9,7 @@ import android.view.View
 import androidx.core.view.isNotEmpty
 
 class CalSyncApp : Application() {
+    @SuppressLint("MissingPermission")
     override fun onCreate() {
         super.onCreate()
         // Register a lifecycle callback to apply top inset padding to each activity's content view
@@ -54,10 +56,28 @@ class CalSyncApp : Application() {
                 val am = getSystemService(android.app.AlarmManager::class.java)
                 val triggerAt = System.currentTimeMillis() + 2000
                 try {
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                        am?.setExactAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, triggerAt, pi)
+                    if (am != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                        if (am.canScheduleExactAlarms()) {
+                            try {
+                                am.setExactAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, triggerAt, pi)
+                            } catch (e: SecurityException) {
+                                Log.w("CalSync", "No SCHEDULE_EXACT_ALARM permission: ${e.message}")
+                            }
+                        } else {
+                            Log.w("CalSync", "App not allowed to schedule exact alarms")
+                        }
+                    } else if (am != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                        try {
+                            am.setExactAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, triggerAt, pi)
+                        } catch (e: SecurityException) {
+                            Log.w("CalSync", "No SCHEDULE_EXACT_ALARM permission: ${e.message}")
+                        }
                     } else {
-                        am?.setExact(android.app.AlarmManager.RTC_WAKEUP, triggerAt, pi)
+                        try {
+                            am?.setExact(android.app.AlarmManager.RTC_WAKEUP, triggerAt, pi)
+                        } catch (e: SecurityException) {
+                            Log.w("CalSync", "No SCHEDULE_EXACT_ALARM permission: ${e.message}")
+                        }
                     }
                 } catch (_: Throwable) {}
             } catch (_: Throwable) { }

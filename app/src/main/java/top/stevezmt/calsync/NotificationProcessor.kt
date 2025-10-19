@@ -69,6 +69,7 @@ object NotificationProcessor {
 						// also broadcast baseMillis so UI can display what 'now' was when parsing
 						try {
 							val b = android.content.Intent(NotificationUtils.ACTION_EVENT_CREATED)
+							b.setPackage(context.packageName)
 							b.putExtra(NotificationUtils.EXTRA_EVENT_ID, eventId)
 							b.putExtra(NotificationUtils.EXTRA_EVENT_TITLE, eventTitle)
 							b.putExtra(NotificationUtils.EXTRA_EVENT_START, parsed.startMillis)

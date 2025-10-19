@@ -2,6 +2,8 @@ package top.stevezmt.calsync
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import java.util.*
 
@@ -21,6 +23,17 @@ class DateTimeParserTest {
         set(Calendar.MINUTE, 0)
         set(Calendar.SECOND, 0)
         set(Calendar.MILLISECOND, 0)
+    }
+
+    @Test
+    fun testTitle_FirstLeagueClass() {
+        val text = "测试教师：周三下午13:10将会开展本学期第一次团课，地点是测试楼21b6，还请大家准时参加，切勿迟到@全体成员"
+        val r = DateTimeParser.parseDateTime(text)
+        assertNotNull(r)
+        val title = r!!.title ?: ""
+        // 期望标题包含“团课”，不应是“本学期第”这类残缺序数
+    assertTrue("title should contain 团课, actual=$title", title.contains("团课"))
+    assertFalse("title should not be '本学期第'", title == "本学期第")
     }
 
     private fun parseSlots(text: String): List<TimeNLPAdapter.ParseSlot> {
@@ -744,6 +757,18 @@ class DateTimeParserTest {
     }
 
     @Test
+    fun testRuleParserTomorrowAfternoon4WithContext() {
+        val base = (baseCal.clone() as Calendar)
+        val text = "明天下午4点开会，请及时参加！"
+        val result = DateTimeParser.parseDateTime(DummyContext, text, base.timeInMillis)
+        assertNotNull(result)
+        val cal = Calendar.getInstance().apply { timeInMillis = result!!.startMillis }
+        assertEquals(17, cal.get(Calendar.DAY_OF_MONTH))
+        assertEquals(Calendar.SEPTEMBER, cal.get(Calendar.MONTH))
+        assertEquals(16, cal.get(Calendar.HOUR_OF_DAY))
+    }
+
+    @Test
     fun testIM_DotDateNoSpaceJoin() {
         val slots = parseSlots("9.28-13:30 聚会")
         assertNotNull(slots.firstOrNull())
@@ -764,7 +789,35 @@ class DateTimeParserTest {
         assertEquals(0, cal.get(Calendar.MINUTE))
     }
 
-    object DummyContext: android.content.ContextWrapper(null)
+    object DummyContext: android.content.ContextWrapper(null) {
+        private val mem = mutableMapOf<String, Any>()
+        override fun getSharedPreferences(name: String?, mode: Int): android.content.SharedPreferences {
+            return object: android.content.SharedPreferences {
+                override fun getAll(): MutableMap<String, *> = mem
+                override fun getString(key: String?, defValue: String?): String? = mem[key] as? String ?: defValue
+                override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? = @Suppress("UNCHECKED_CAST") (mem[key] as? MutableSet<String>) ?: defValues
+                override fun getInt(key: String?, defValue: Int): Int = (mem[key] as? Int) ?: defValue
+                override fun getLong(key: String?, defValue: Long): Long = (mem[key] as? Long) ?: defValue
+                override fun getFloat(key: String?, defValue: Float): Float = (mem[key] as? Float) ?: defValue
+                override fun getBoolean(key: String?, defValue: Boolean): Boolean = (mem[key] as? Boolean) ?: defValue
+                override fun contains(key: String?) = mem.containsKey(key)
+                override fun edit(): android.content.SharedPreferences.Editor = object: android.content.SharedPreferences.Editor {
+                    override fun putString(key: String?, value: String?): android.content.SharedPreferences.Editor { if (key!=null) { if (value==null) mem.remove(key) else mem[key]=value }; return this }
+                    override fun putStringSet(key: String?, values: MutableSet<String>?): android.content.SharedPreferences.Editor { if (key!=null) { if (values==null) mem.remove(key) else mem[key]=values }; return this }
+                    override fun putInt(key: String?, value: Int): android.content.SharedPreferences.Editor { if (key!=null) mem[key]=value; return this }
+                    override fun putLong(key: String?, value: Long): android.content.SharedPreferences.Editor { if (key!=null) mem[key]=value; return this }
+                    override fun putFloat(key: String?, value: Float): android.content.SharedPreferences.Editor { if (key!=null) mem[key]=value; return this }
+                    override fun putBoolean(key: String?, value: Boolean): android.content.SharedPreferences.Editor { if (key!=null) mem[key]=value; return this }
+                    override fun remove(key: String?): android.content.SharedPreferences.Editor { if (key!=null) mem.remove(key); return this }
+                    override fun clear(): android.content.SharedPreferences.Editor { mem.clear(); return this }
+                    override fun commit(): Boolean = true
+                    override fun apply() {}
+                }
+                override fun registerOnSharedPreferenceChangeListener(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener?) {}
+                override fun unregisterOnSharedPreferenceChangeListener(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener?) {}
+            }
+        }
+    }
 
     // --- Added tests for relative times and ranges ---
     @Test

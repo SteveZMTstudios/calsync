@@ -1,7 +1,17 @@
 
-# 通知日历同步 (calsync)
+<div align="center">
 
-通过监听来自工作和社交APP的通知，将事件登记到您的日历中。  
+![](app\src\main\res\mipmap-xxxhdpi\ic_launcher_round.webp)
+
+# 通知日历同步
+通过监听来自工作和社交APP的通知，将事件登记到您的日历中。
+
+[![GitHub repo size](https://img.shields.io/github/repo-size/stevezmtstudios/calsync?style=flat-square)](#)
+[![GitHub release (release name instead of tag name)](https://img.shields.io/github/v/release/stevezmtstudios/calsync?style=flat-square)](https://github.com/stevezmtstudios/calsync/releases)
+[![GitHub issues](https://img.shields.io/github/issues/stevezmtstudios/calsync?style=flat-square)](#)
+[![GitHub license](https://img.shields.io/github/license/stevezmtstudios/calsync?style=flat-square)](LICENSE)
+
+</div>
 
 > [!WARNING] 
 > 此项目包含部分**AI生成**（已经过人类审查）和人类编写修正的内容。  
@@ -10,6 +20,16 @@
 尽管此应用申请了设备和通知访问权限，但是该程序**未申请网络访问权限**，您的数据不会被存储，也不会传出设备。  
 
 需要 Android 6.0 或更高版本。
+
+<div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;max-width:100%;">
+  <iframe 
+    src="//player.bilibili.com/player.html?isOutside=true&aid=115399312086930&bvid=BV1srsFzQE3t&cid=33205783366&p=1"
+    title="Bilibili 视频"
+    scrolling="no"
+    allowfullscreen="true"
+    style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;">
+  </iframe>
+</div>
 
 <details>
 <summary>详细信息</summary>
@@ -25,16 +45,17 @@ tarSDK: 36
 - android.permission.READ_CALENDAR
   读取日历活动和详情
 - android.permission.WRITE_CALENDAR
-  添加或修改
+  添加或修改日历活动
 - android.permission.FOREGROUND_SERVICE
-  
+  允许在前台运行服务
 - android.permission.FOREGROUND_SERVICE_DATA_SYNC
-  
+  允许在前台运行数据同步服务
 - android.permission.POST_NOTIFICATIONS
-  
+  允许发送通知
 - android.permission.QUERY_ALL_PACKAGES
-  
+  允许查询所有已安装的应用包
 - top.stevezmt.calsync.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+  允许动态注册未导出的广播接收器
 
 ### 三方库
 未引入任何三方库
@@ -64,7 +85,8 @@ cd calsync
 ### 构建项目
 ```bash
 GRADLE_OPTS="-Xmx3g" ./gradlew assembleRelease
-# lint尚未完善，./gradlew build 无法编译
+# or
+./gradlew build
 ```
 
 ### 运行测试
@@ -81,3 +103,20 @@ https://github.com/huaban/jieba-analysis
 ## 许可证
 
 GPL-3.0 License. 详情见 [LICENSE](LICENSE) 文件。
+
+```
+Copyright (C) 2025  Steve ZMT me@stevezmt.top
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://gnu.ac.cn/licenses/>.
+```

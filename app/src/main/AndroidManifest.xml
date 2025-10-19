@@ -9,6 +9,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- 设置精确闹钟权限：用于异常捕获后定时唤醒 CrashNotifierReceiver，属于用户可感知的定时操作，符合 SCHEDULE_EXACT_ALARM 权限要求。 -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
     <!-- 用于在设备上查询所有已安装的包（使 AppPicker 可以列出非 Launcher 应用）。
         注意：在 Google Play 上发布的应用若使用该权限可能需要声明并符合政策，
         建议仅在内部或受控分发场景使用，或在发布到 Play 前改为使用更有针对性的查询（如通过 Intent 查询或请求用户手动输入包名）。 -->

@@ -157,6 +157,7 @@ class NotificationMonitorService : NotificationListenerService() {
                     NotificationCache.add(entry)
                     try {
                         val b = Intent(NotificationUtils.ACTION_EVENT_CREATED)
+                        b.setPackage(applicationContext.packageName)
                         b.putExtra(NotificationUtils.EXTRA_EVENT_ID, eventId)
                         b.putExtra(NotificationUtils.EXTRA_EVENT_TITLE, title)
                         b.putExtra(NotificationUtils.EXTRA_EVENT_START, startMillis)
