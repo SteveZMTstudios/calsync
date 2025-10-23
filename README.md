@@ -35,21 +35,27 @@
 minSDK: 23
 tarSDK: 36
 
-### 权限列表  
+### 权限列表和说明  
 - android.permission.READ_CALENDAR
-  读取日历活动和详情
+  读取日历活动和详情  
+  必需的权限，它用于添加到特定日历和链接到日历事件的通知提示。
 - android.permission.WRITE_CALENDAR
-  添加或修改日历活动
+  添加或修改日历活动  
+  必需的权限，它用于添加到特定日历和链接到日历事件的通知提示。
 - android.permission.FOREGROUND_SERVICE
-  允许在前台运行服务
+  允许在前台运行服务  
+  必需的权限，它用于在后台持续监听通知。若拒绝此权限，应用将无法持续运作。
 - android.permission.FOREGROUND_SERVICE_DATA_SYNC
-  允许在前台运行数据同步服务
+  允许在前台运行数据同步服务  
 - android.permission.POST_NOTIFICATIONS
-  允许发送通知
+  允许发送通知  
+  可选的权限，拒绝将导致您无法知晓哪些日历被更改或程序崩溃，也无法从通知中删除或编辑创建的日历。
 - android.permission.QUERY_ALL_PACKAGES
-  允许查询所有已安装的应用包
+  允许查询所有已安装的应用包  
+  可选的权限，允许用户选取要检查通知的应用。若拒绝此权限，用户只能选择预设的应用包，或选择匹配所有通知来源。  
 - top.stevezmt.calsync.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
-  允许动态注册未导出的广播接收器
+  允许动态注册未导出的广播接收器  
+  该权限未运作
 
 ### 三方库
 未引入任何三方库

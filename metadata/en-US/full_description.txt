@@ -3,6 +3,7 @@
 Automatically create calendar events from notifications received from work and social apps by parsing Chinese time expressions.
 
 Features:
+
 • Automatically recognizes Chinese time expressions in notifications (e.g., "明天下午3点" = tomorrow 3pm, "周五晚上8点" = Friday 8pm)
 • Supports rich Chinese relative time parsing ("3天后" = in 3 days, "1个半小时后" = in 1.5 hours)
 • Supports fuzzy time expressions ("今晚" = tonight, "下午" = afternoon, "周末" = weekend)
@@ -12,11 +13,13 @@ Features:
 • Privacy-respecting, data never leaves your device
 
 Use Cases (Chinese social/work apps):
+
 • WeChat/QQ group notifications: "明天下午3点开会" (meeting tomorrow 3pm)
 • Work notifications: "周五晚上8点项目汇报" (project report Friday 8pm)
 • Social plans: "下周二一起吃饭" (dinner together next Tuesday)
 
 Permissions:
+
 • Calendar access: Read and create calendar events
 • Notification access: Read system notifications to extract time information
 • Foreground service: Keep service running in background
