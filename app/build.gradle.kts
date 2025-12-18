@@ -14,8 +14,8 @@ android {
         applicationId = "top.stevezmt.calsync"
         minSdk = 23
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.0.2"
+        versionCode = 6
+        versionName = "0.0.3-INTERNALDEBUG"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

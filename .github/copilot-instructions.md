@@ -5,7 +5,7 @@ This repo is an Android (Kotlin) app that listens to system notifications, parse
 ## Architecture and data flow
 - Entry points
   - `NotificationMonitorService` (NotificationListenerService): receives notifications, extracts title/content, and invokes `NotificationProcessor.process(...)` on a background dispatcher.
-  - `KeepAliveService` (foreground service, type dataSync): optional keep-alive, shows ongoing notification; controlled by `SettingsStore.isKeepAliveEnabled`.
+  - `KeepAliveService` (foreground service, type specialUse): optional keep-alive, shows ongoing notification; controlled by `SettingsStore.isKeepAliveEnabled`.
   - `CalSyncApp` (Application): window inset handling, crash capture + deferred broadcast via `CrashNotifierReceiver`.
 - Processing pipeline (single source of truth)
   1) Keyword filter from `SettingsStore.getKeywords()` and optional app filter from `SettingsStore.getSelectedSourceAppPkgs()`.

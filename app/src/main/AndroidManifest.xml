@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"
         tools:ignore="ForegroundServicesPolicy" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- 设置精确闹钟权限：用于异常捕获后定时唤醒 CrashNotifierReceiver，属于用户可感知的定时操作，符合 SCHEDULE_EXACT_ALARM 权限要求。 -->
@@ -71,7 +71,11 @@
         <service
             android:name="top.stevezmt.calsync.KeepAliveService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="keep_alive_for_notification_listener" />
+        </service>
 
 
 
