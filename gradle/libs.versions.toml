@@ -1,12 +1,17 @@
 [versions]
 agp = "8.13.0"
 kotlin = "2.0.21"
-coreKtx = "1.10.1"
+coreKtx = "1.13.0"
 junit = "4.13.2"
 junitVersion = "1.1.5"
 espressoCore = "3.5.1"
 appcompat = "1.7.0"
 material = "1.12.0"
+mlkit-entity-extraction = "16.0.0-beta5"
+mockito = "5.11.0"
+mockito-kotlin = "5.2.1"
+jieba = "1.0.2"
+xk-time = "3.2.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -15,6 +20,11 @@ androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "j
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+mlkit-entity-extraction = { group = "com.google.mlkit", name = "entity-extraction", version.ref = "mlkit-entity-extraction" }
+mockito-core = { group = "org.mockito", name = "mockito-core", version.ref = "mockito" }
+mockito-kotlin = { group = "org.mockito.kotlin", name = "mockito-kotlin", version.ref = "mockito-kotlin" }
+jieba = { group = "com.huaban", name = "jieba-analysis", version.ref = "jieba" }
+xk-time = { group = "com.github.xkzhangsan", name = "xk-time", version.ref = "xk-time" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

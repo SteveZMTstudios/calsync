@@ -135,9 +135,9 @@ class NotificationMonitorService : NotificationListenerService() {
             }
             // add to recent notifications cache
             try {
-                val ts = java.text.SimpleDateFormat("HH:mm:ss").format(java.util.Date())
+                val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
                 val summary = "[$ts] $pkg - ${title.ifBlank { content.take(40) }}"
-                NotificationCache.add(summary)
+                NotificationCache.add(applicationContext, summary)
             } catch (_: Throwable) {}
         } catch (e: Exception) {
             Log.e(TAG, "Failed to handle notification", e)
@@ -152,9 +152,9 @@ class NotificationMonitorService : NotificationListenerService() {
                 // The event-created notification is already posted by NotificationProcessor -> NotificationUtils.sendEventCreated.
                 try {
                     // also log created events into NotificationCache and broadcast to UI
-                    val ts = java.text.SimpleDateFormat("HH:mm:ss").format(java.util.Date())
+                    val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
                     val entry = "[$ts] event_created id=$eventId title=$title start=${startMillis}"
-                    NotificationCache.add(entry)
+                    NotificationCache.add(applicationContext, entry)
                     try {
                         val b = Intent(NotificationUtils.ACTION_EVENT_CREATED)
                         b.setPackage(applicationContext.packageName)
@@ -167,6 +167,10 @@ class NotificationMonitorService : NotificationListenerService() {
             }
             override fun onError(message: String?) {
                 sendErrorNotification(message)
+            }
+            override fun onDebugLog(line: String) {
+                // Do not include full notification content; keep it concise.
+                try { NotificationUtils.sendDebugLog(applicationContext, "[notif] $line") } catch (_: Throwable) {}
             }
         })
         Log.d(TAG, "process result: $res")

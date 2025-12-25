@@ -10,14 +10,33 @@ android {
     namespace = "top.stevezmt.calsync"
     compileSdk = 36
 
+    // Native (llama.cpp) build requires a valid NDK installation.
+    // Pin to an installed version that contains source.properties.
+    ndkVersion = "29.0.13599879"
+
     defaultConfig {
         applicationId = "top.stevezmt.calsync"
         minSdk = 23
         targetSdk = 36
         versionCode = 6
-        versionName = "0.0.3-INTERNALDEBUG"
+        versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-std=c++17"
+            }
+        }
+    }
+
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64", "armeabi-v7a", "x86")
+            isUniversalApk = true
+        }
     }
 
     buildTypes {
@@ -36,6 +55,20 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+        }
+    }
+
+    applicationVariants.all {
+        outputs.all {
+            val output = this as com.android.build.gradle.internal.api.ApkVariantOutputImpl
+            val abi = output.getFilter(com.android.build.OutputFile.ABI) ?: "universal"
+            output.outputFileName = "calsync-${versionName}-${abi}.apk"
+        }
+    }
 }
 
 dependencies {
@@ -44,8 +77,13 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     // jieba for chinese segmentation to improve title extraction
-    implementation("com.huaban:jieba-analysis:1.0.2")
+    implementation(libs.jieba)
+    // Natural language time parsing (Java, rule-based)
+    implementation(libs.xk.time)
+    implementation(libs.mlkit.entity.extraction)
     testImplementation(libs.junit)
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.mockito.kotlin)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

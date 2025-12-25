@@ -12,6 +12,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.net.toUri
+import com.google.android.material.appbar.MaterialToolbar
 
 class NotificationStatusActivity : AppCompatActivity() {
     private lateinit var statusView: TextView
@@ -19,6 +20,8 @@ class NotificationStatusActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_notification_status)
+
+        findViewById<MaterialToolbar>(R.id.notification_toolbar)?.let { setSupportActionBar(it) }
 
         // Enable back button in action bar
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -105,8 +108,9 @@ class NotificationStatusActivity : AppCompatActivity() {
                     appendLine("channel=$ch not supported (SDK < 26)")
                 }
             }
-            appendLine("\n--- 最近收到的通知 (最多 ${NotificationCache.snapshot().size}) ---")
-            NotificationCache.snapshot().take(50).forEach { appendLine(it) }
+            val recent = NotificationCache.snapshot(this)
+            appendLine("\n--- 最近收到的通知 (最多 ${recent.size}) ---")
+            recent.take(50).forEach { appendLine(it) }
         } catch (e: Exception) {
             appendLine("failed to refresh status: ${e.message}")
         }

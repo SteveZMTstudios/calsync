@@ -17,13 +17,19 @@
 > 此项目包含部分**AI生成**（已经过人类审查）和人类编写修正的内容。  
 > 此项目目前仅支持**简体中文 Simplified Chinese**。
 
-尽管此应用申请了设备和通知访问权限，但是该程序**未申请网络访问权限**，您的数据不会被存储，也不会传出设备。  
+尽管此应用申请了设备和通知访问权限，但是该程序本体**未使用网络访问权限**，您的数据不会被存储，也不会传出设备。  
+（注：ML Kit SDK 可能会使用网络权限进行诊断数据上报，详情见[隐私政策](POLICY.md)）
 
 需要 Android 6.0 或更高版本。
+
 
 <!-- <video src="https://sharepoint.cf.stevezmt.top/cdn/assets/self/calsync-intro.mp4" style="max-width:100%;height:auto" controls autoplay>
   您的浏览器不支持 video 标签。</video> -->
 <video src="https://sharepoint.cf.stevezmt.top/cdn/assets/self/calsync-intro.mp4" controls="controls" width="500" height="300"></video>
+
+
+查看此应用的 [隐私政策](POLICY.md) 。
+
 
 <details>
 <summary>详细信息</summary>
@@ -42,14 +48,16 @@ tarSDK: 36
   添加或修改日历活动
 - android.permission.FOREGROUND_SERVICE
   允许在前台运行服务
-- android.permission.FOREGROUND_SERVICE_DATA_SYNC
-  允许在前台运行数据同步服务
+- android.permission.FOREGROUND_SERVICE_SPECIAL_USE
+  允许在前台运行特殊用途服务（用于通知监听和保活）
 - android.permission.POST_NOTIFICATIONS
   允许发送通知
+- android.permission.SCHEDULE_EXACT_ALARM
+  允许设置精确闹钟（用于崩溃后的通知提醒）
 - android.permission.QUERY_ALL_PACKAGES
-  允许查询所有已安装的应用包
-- top.stevezmt.calsync.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
-  允许动态注册未导出的广播接收器
+  允许查询所有已安装的应用包（用于应用过滤功能）
+- android.permission.BIND_NOTIFICATION_LISTENER_SERVICE
+  允许应用读取所有通知（核心功能）
 
 ### 三方库
 未引入任何三方库

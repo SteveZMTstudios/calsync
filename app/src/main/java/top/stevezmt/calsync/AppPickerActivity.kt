@@ -8,6 +8,7 @@ import android.widget.CheckedTextView
 import android.widget.ListView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.appbar.MaterialToolbar
 
 class AppPickerActivity : AppCompatActivity() {
 	data class AppEntry(val label: String, val packageName: String, var checked: Boolean)
@@ -20,6 +21,8 @@ class AppPickerActivity : AppCompatActivity() {
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
 		setContentView(R.layout.activity_app_picker)
+
+		findViewById<MaterialToolbar>(R.id.app_picker_toolbar)?.let { setSupportActionBar(it) }
 
 		// Enable back button in action bar
 		supportActionBar?.setDisplayHomeAsUpEnabled(true)

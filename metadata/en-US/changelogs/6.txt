@@ -1,0 +1,21 @@
+**WARNING: This version introduced ML Kit that is closed-source from Google to improve time and entity extraction for Chinese notifications. If you prefer a fully open-source version, please continue using the 0.0.x versions.**
+## Core enhancements
+- Introduced Google ML Kit engine: added ML-based time and entity extraction, significantly improving recognition accuracy for times, locations, and event titles in complex Chinese notifications.
+- Parsing engine integration: optimized settings logic to support seamless switching among "Built-in rules", "xk-time", and "ML Kit", and automatically synchronize time parsing with the event extraction engine.
+- Experimental AI support: preliminary support for local GGUF models (based on llama.cpp) (experimental).
+
+## UI/UX improvements
+- Real-time debug log viewer: added a scrollable log area on the main screen to view notification processing, parsing results, and debug info in real time; includes auto-scroll and capacity limits to prevent lag.
+- Settings UI upgrades:
+    - Parser engine selector now displays detailed descriptions.
+    - Added "Event reminder time" setting, supporting custom minutes-before reminders.
+    - Improved interaction logic for the app selector.
+- Background log persistence: supports loading the most recent 50 processing records from NotificationCache for easier tracing.
+
+## Stability and compatibility fixes
+- Android 14+ adaptation: updated foreground service type (specialUse) to resolve potential system termination of the data sync service on Android 14.
+- ANR prevention: moved test parsing logic to a background thread to avoid UI freezes when handling complex text or loading AI models.
+- Memory and performance optimizations:
+    - Added per-log entry length limit (1200 characters) and a total count limit.
+    - Improved TextView rendering efficiency by using batch updates to reduce layout redraws.
+    - Rule engine enhancements: improved built-in rules for "countdowns" (e.g., “还有X小时”) and "relative offsets" (e.g., “3天后”).

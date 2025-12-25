@@ -9,8 +9,12 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.appbar.MaterialToolbar
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class AboutActivity : AppCompatActivity() {
 
@@ -23,11 +27,11 @@ class AboutActivity : AppCompatActivity() {
                     out.write(jsonString.toByteArray())
                     out.flush()
                 }
-                // update subtitle to show success and path last segment
-                findViewById<TextView>(R.id.backup_subtitle).text = "已保存: ${uri.lastPathSegment}"
-                Toast.makeText(this, "备份已保存", Toast.LENGTH_SHORT).show()
+                        SettingsStore.setLastBackupInfo(this, System.currentTimeMillis(), uri.lastPathSegment)
+                        updateBackupSubtitle()
+                Toast.makeText(this, getString(R.string.toast_backup_saved), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Toast.makeText(this, "写入备份失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.toast_backup_failed, e.message), Toast.LENGTH_SHORT).show()
             } finally {
                 lastGeneratedBackupJson = null
             }
@@ -114,10 +118,10 @@ class AboutActivity : AppCompatActivity() {
                         }
                         if (pkgs.isNotEmpty()) SettingsStore.setSelectedSourceApps(this, pkgs, names)
                     }
-                    Toast.makeText(this, "配置已恢复", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.toast_config_restored), Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(this, "恢复失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.toast_restore_failed, e.message), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -125,16 +129,18 @@ class AboutActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_about)
 
+        findViewById<MaterialToolbar>(R.id.about_toolbar)?.let { setSupportActionBar(it) }
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.setTitle("关于")
+        supportActionBar?.title = getString(R.string.title_about)
+        updateBackupSubtitle()
 
         // Set version
         val versionText = findViewById<TextView>(R.id.text_version)
         try {
             val packageInfo = packageManager.getPackageInfo(packageName, 0)
-            versionText.text = "版本 ${packageInfo.versionName}"
+            versionText.text = getString(R.string.version_format, packageInfo.versionName)
         } catch (e: Exception) {
-            versionText.text = "版本 1.0.0"
+            versionText.text = getString(R.string.version_format, "1.0.0")
         }
 
         // Backup config (save via system file picker)
@@ -169,7 +175,7 @@ class AboutActivity : AppCompatActivity() {
                 val suggested = "calsync_backup_${System.currentTimeMillis()}.json"
                 backupCreateLauncher.launch(suggested)
             } catch (e: Exception) {
-                Toast.makeText(this, "备份失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.toast_backup_failed_simple, e.message), Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -186,7 +192,7 @@ class AboutActivity : AppCompatActivity() {
                 intent.data = uri
                 startActivity(intent)
             } catch (e: Exception) {
-                Toast.makeText(this, "无法打开应用设置", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.error_open_app_settings), Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -196,7 +202,7 @@ class AboutActivity : AppCompatActivity() {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/stevezmtstudios/calsync/issues/new/choose"))
                 startActivity(intent)
             } catch (e: Exception) {
-                Toast.makeText(this, "无法打开浏览器", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.error_open_browser), Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -206,7 +212,7 @@ class AboutActivity : AppCompatActivity() {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/stevezmtstudios/calsync"))
                 startActivity(intent)
             } catch (e: Exception) {
-                Toast.makeText(this, "无法打开浏览器", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.error_open_browser), Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -216,7 +222,7 @@ class AboutActivity : AppCompatActivity() {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://stevezmt.top"))
                 startActivity(intent)
             } catch (e: Exception) {
-                Toast.makeText(this, "无法打开浏览器", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.error_open_browser), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -229,5 +235,18 @@ class AboutActivity : AppCompatActivity() {
             }
             else -> super.onOptionsItemSelected(item)
         }
+    }
+
+    private fun updateBackupSubtitle() {
+        val sub = findViewById<TextView>(R.id.backup_subtitle)
+        val ts = SettingsStore.getLastBackupTimestamp(this)
+        if (ts == null) {
+            sub?.text = getString(R.string.backup_none)
+            return
+        }
+        val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+        val name = SettingsStore.getLastBackupName(this)
+        val label = name?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
+        sub?.text = getString(R.string.backup_format, fmt.format(Date(ts)), label)
     }
 }

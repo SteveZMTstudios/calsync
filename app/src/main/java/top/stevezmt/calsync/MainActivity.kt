@@ -5,12 +5,13 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.Looper
 import android.provider.Settings
+import android.text.SpannableStringBuilder
 import android.text.method.ScrollingMovementMethod
+import android.view.MotionEvent
 import android.widget.Button
 import android.widget.EditText
-import android.widget.ImageButton
-import android.widget.Switch
 import android.app.AlertDialog
 import android.widget.TextView
 import android.widget.Toast
@@ -20,22 +21,39 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.drawerlayout.widget.DrawerLayout
 import com.google.android.material.navigation.NavigationView
 import androidx.core.content.edit
+import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+import com.google.android.material.materialswitch.MaterialSwitch
 
 class MainActivity : AppCompatActivity() {
+
+    private val pendingUiLogLines = ArrayDeque<String>()
+    private var uiLogFlushScheduled = false
+    private val uiLogMaxChars = 60_000
 
     private lateinit var titleInput: EditText
     private lateinit var contentInput: EditText
     private lateinit var testBtn: Button
-    private lateinit var settingsBtn: ImageButton
+    private lateinit var settingsBtn: ExtendedFloatingActionButton
     private lateinit var notificationAccessBtn: Button
     private lateinit var resultView: TextView
     private lateinit var selectCalendarBtn: Button
     private lateinit var calendarIndicator: TextView
-    private lateinit var keepAliveSwitch: Switch
+    private lateinit var keepAliveSwitch: MaterialSwitch
     private lateinit var refreshNotificationServiceBtn: Button
     private lateinit var batteryOptimizationBtn: Button
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var navView: NavigationView
+
+    private val debugLogReceiver = object: android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            try {
+                if (intent?.action != NotificationUtils.ACTION_DEBUG_LOG) return
+                val line = intent.getStringExtra(NotificationUtils.EXTRA_DEBUG_LINE) ?: return
+                appendResult(line)
+            } catch (_: Throwable) {}
+        }
+    }
 
     private val requestCalendarPermission = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -70,7 +88,7 @@ class MainActivity : AppCompatActivity() {
                     val title = intent.getStringExtra(NotificationUtils.EXTRA_EVENT_TITLE) ?: ""
                     val start = intent.getLongExtra(NotificationUtils.EXTRA_EVENT_START, 0L)
                     val base = intent.getLongExtra(NotificationUtils.EXTRA_EVENT_BASE, -1L)
-                    appendResult("事件创建: id=$id title=$title start=${java.text.SimpleDateFormat("M月d日 H:mm").format(java.util.Date(start))}")
+                    appendResult("事件创建: id=$id title=$title start=${java.text.SimpleDateFormat("M月d日 H:mm", java.util.Locale.getDefault()).format(java.util.Date(start))}")
                     if (base > 0) {
                         appendResult("解析时的 now (DateTimeParser base): ${DateTimeParser.getNowFormatted()}  (wall clock now); parser baseMillis=$base")
                     }
@@ -82,6 +100,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        val toolbar = findViewById<MaterialToolbar>(R.id.top_app_bar)
+        setSupportActionBar(toolbar)
         // Enable menu button on the left side of the app bar (same place as back button)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setHomeAsUpIndicator(R.drawable.menu_24)
@@ -104,7 +124,19 @@ class MainActivity : AppCompatActivity() {
     selectCalendarBtn = findViewById(R.id.btn_select_calendar)
     calendarIndicator = findViewById(R.id.text_calendar_selected)
     keepAliveSwitch = findViewById(R.id.switch_keep_alive)
+        // Use a mutable buffer so we can efficiently cap log size
+        resultView.text = SpannableStringBuilder()
         resultView.movementMethod = ScrollingMovementMethod()
+        // Allow TextView to scroll inside parent NestedScrollView
+        resultView.setOnTouchListener { v, event ->
+            if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE) {
+                v.parent?.requestDisallowInterceptTouchEvent(true)
+            }
+            if (event.action == MotionEvent.ACTION_UP) {
+                v.performClick()
+            }
+            false
+        }
 
         testBtn.setOnClickListener { simulateNotification() }
     // settings button is now in the appbar menu and also available as FAB
@@ -134,11 +166,12 @@ class MainActivity : AppCompatActivity() {
         // Populate nav header title and version dynamically
         try {
             val header = navView.getHeaderView(0)
+            InsetsHelper.applyTopInsetOnce(header)
             val titleView = header.findViewById<TextView>(R.id.nav_header_title)
             val versionView = header.findViewById<TextView>(R.id.nav_header_version)
             titleView?.text = getString(R.string.app_name)
             val pkgInfo = packageManager.getPackageInfo(packageName, 0)
-            versionView?.text = "版本 ${pkgInfo.versionName}"
+            versionView?.text = getString(R.string.version_format, pkgInfo.versionName)
         } catch (_: Exception) {}
 
         // Set up navigation view item selection
@@ -158,7 +191,62 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-    requestCalendarRuntime()
+        updateCalendarIndicator()
+
+        if (!SettingsStore.isPrivacyAccepted(this)) {
+            showPrivacyDialog()
+        } else {
+            onPrivacyAccepted()
+        }
+
+        // Print DateTimeParser current now/time when opening main UI
+        try {
+            appendResult("DateTimeParser now: ${DateTimeParser.getNowFormatted()}")
+        } catch (_: Throwable) {}
+
+        // Load recent logs captured in background (avoid blocking UI thread)
+        try {
+            kotlin.concurrent.thread(name = "calsync-load-logs") {
+                try {
+                    val cached = NotificationCache.snapshot(applicationContext)
+                    // snapshot is newest-first; print oldest-first for readable chronology
+                    cached.asReversed().forEach { appendResult(it) }
+                } catch (_: Throwable) {}
+            }
+        } catch (_: Throwable) {}
+    }
+
+    private fun showPrivacyDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.dialog_title_privacy)
+            .setMessage(R.string.dialog_message_privacy)
+            .setCancelable(false)
+            .setPositiveButton(R.string.btn_agree) { _, _ ->
+                SettingsStore.setPrivacyAccepted(this, true)
+                onPrivacyAccepted()
+            }
+            .setNegativeButton(R.string.btn_disagree) { _, _ ->
+                finish()
+            }
+            .setNeutralButton(R.string.link_privacy_policy) { _, _ ->
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/stevezmtstudios/calsync/blob/main/POLICY.md"))
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    Toast.makeText(this, R.string.error_open_browser, Toast.LENGTH_SHORT).show()
+                }
+                // Re-show the dialog because clicking neutral button closes it
+                showPrivacyDialog()
+            }
+            .show()
+    }
+
+    private fun onPrivacyAccepted() {
+        if (SettingsStore.isKeepAliveEnabled(this)) startKeepAlive()
+        updateCalendarIndicator()
+        checkNotificationListenerStatus()
+
+        requestCalendarRuntime()
 
         // 首次启动：初始化通知通道并请求通知权限（如果需要）
         try {
@@ -180,10 +268,6 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {
             // 无论如何不阻塞主流程
         }
-        // Print DateTimeParser current now/time when opening main UI
-        try {
-            appendResult("DateTimeParser now: ${DateTimeParser.getNowFormatted()}")
-        } catch (_: Throwable) {}
     }
 
     override fun onStart() {
@@ -197,18 +281,34 @@ class MainActivity : AppCompatActivity() {
                 androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
             )
         } catch (_: Throwable) {}
+
+        try {
+            val f2 = android.content.IntentFilter(NotificationUtils.ACTION_DEBUG_LOG)
+            androidx.core.content.ContextCompat.registerReceiver(
+                this,
+                debugLogReceiver,
+                f2,
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+        } catch (_: Throwable) {}
     }
 
     override fun onStop() {
         try {
             unregisterReceiver(eventCreatedReceiver)
         } catch (_: Throwable) {}
+        try {
+            unregisterReceiver(debugLogReceiver)
+        } catch (_: Throwable) {}
         super.onStop()
     }
 
     override fun onResume() {
         super.onResume()
+        if (!SettingsStore.isPrivacyAccepted(this)) return
+
         if (SettingsStore.isKeepAliveEnabled(this)) startKeepAlive()
+        updateCalendarIndicator()
         
         // 检查通知监听权限状态
         checkNotificationListenerStatus()
@@ -221,12 +321,12 @@ class MainActivity : AppCompatActivity() {
         if (!NotificationHelper.isNotificationListenerEnabled(this)) {
             // 通知监听未启用，显示警告对话框
             AlertDialog.Builder(this)
-                .setTitle("需要授予通知访问权限")
-                .setMessage("此应用需要通知访问权限才能监听通知并创建日历事件。请在下一屏幕中允许权限。")
-                .setPositiveButton("前往设置") { _, _ ->
+                .setTitle(R.string.dialog_title_notification_permission)
+                .setMessage(R.string.dialog_message_notification_permission)
+                .setPositiveButton(R.string.btn_go_to_settings) { _, _ ->
                     NotificationHelper.openNotificationListenerSettings(this)
                 }
-                .setNegativeButton("稍后") { dialog, _ -> dialog.dismiss() }
+                .setNegativeButton(R.string.btn_later) { dialog, _ -> dialog.dismiss() }
                 .show()
         } else if (NotificationHelper.needsSpecialRomSettings()) {
             // 检查是否需要特殊厂商设置的提示
@@ -235,9 +335,9 @@ class MainActivity : AppCompatActivity() {
             
             if (!romHintShown) {
                 AlertDialog.Builder(this)
-                    .setTitle("需要额外设置")
+                    .setTitle(R.string.dialog_title_extra_settings)
                     .setMessage(NotificationHelper.getSpecialRomSettingsHint())
-                    .setPositiveButton("知道了") { _, _ ->
+                    .setPositiveButton(R.string.btn_got_it) { _, _ ->
                         // 设置标记，只显示一次
                         sharedPrefs.edit { putBoolean("rom_hint_shown", true) }
                     }
@@ -259,7 +359,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateCalendarIndicator() {
         val name = SettingsStore.getSelectedCalendarName(this)
-        calendarIndicator.text = if (name == null) "未选择日历(使用默认)" else "当前日历: $name"
+        calendarIndicator.text = if (name == null) getString(R.string.calendar_not_selected) else getString(R.string.calendar_current_format, name)
     }
 
     private fun showCalendarPicker() {
@@ -282,14 +382,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestCalendarRuntime() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val perms = mutableListOf<String>().apply {
-                add(Manifest.permission.WRITE_CALENDAR)
-                add(Manifest.permission.READ_CALENDAR)
-                if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
-            }
-            requestCalendarPermission.launch(perms.toTypedArray())
+        val perms = mutableListOf<String>().apply {
+            add(Manifest.permission.WRITE_CALENDAR)
+            add(Manifest.permission.READ_CALENDAR)
+            if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
         }
+        requestCalendarPermission.launch(perms.toTypedArray())
     }
 
     private fun simulateNotification() {
@@ -298,22 +396,82 @@ class MainActivity : AppCompatActivity() {
         if (t.isEmpty() && c.isEmpty()) {
             Toast.makeText(this, "请输入测试标题或正文", Toast.LENGTH_SHORT).show(); return
         }
-        val res = NotificationProcessor.process(this, NotificationProcessor.ProcessInput("test.pkg", t, c, isTest = true), object: NotificationProcessor.ConfirmationNotifier{
-            override fun onEventCreated(eventId: Long, title: String, startMillis: Long, endMillis: Long, location: String?) {
-                appendResult("成功: 事件ID=$eventId 标题=$title 开始=${java.text.SimpleDateFormat("M月d日 H:mm").format(java.util.Date(startMillis))}")
+
+        // IMPORTANT: do NOT run parsing (especially GGUF) on main thread; it can easily ANR.
+        testBtn.isEnabled = false
+        appendResult("开始解析(测试)…")
+        kotlin.concurrent.thread(name = "calsync-test-parse") {
+            try {
+                val ctx = applicationContext
+                val res = NotificationProcessor.process(
+                    ctx,
+                    NotificationProcessor.ProcessInput("test.pkg", t, c, isTest = true),
+                    object: NotificationProcessor.ConfirmationNotifier{
+                        override fun onEventCreated(eventId: Long, title: String, startMillis: Long, endMillis: Long, location: String?) {
+                            appendResult("成功: 事件ID=$eventId 标题=$title 开始=${java.text.SimpleDateFormat("M月d日 H:mm", java.util.Locale.getDefault()).format(java.util.Date(startMillis))}")
+                        }
+                        override fun onError(message: String?) { appendResult("错误: $message") }
+                        override fun onDebugLog(line: String) { appendResult("[debug] $line") }
+                    }
+                )
+                if (!res.handled) appendResult("未处理: ${res.reason}")
+            } catch (t2: Throwable) {
+                appendResult("错误: ${t2.message}")
+            } finally {
+                try {
+                    runOnUiThread { testBtn.isEnabled = true }
+                } catch (_: Throwable) {}
             }
-            override fun onError(message: String?) { appendResult("错误: $message") }
-        })
-        if (!res.handled) appendResult("未处理: ${res.reason}")
+        }
     }
 
     private fun appendResult(line: String) {
-        resultView.append(line + "\n")
+        // Thread-safe: can be called from background (notification parsing / test thread)
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            resultView.post { appendResult(line) }
+            return
+        }
+
+        pendingUiLogLines.addLast(line)
+        if (uiLogFlushScheduled) return
+        uiLogFlushScheduled = true
+
+        // Batch multiple log lines into one UI update to reduce TextView relayout cost.
+        resultView.postDelayed({
+            uiLogFlushScheduled = false
+            if (pendingUiLogLines.isEmpty()) return@postDelayed
+
+            val chunk = buildString {
+                while (pendingUiLogLines.isNotEmpty()) {
+                    append(pendingUiLogLines.removeFirst())
+                    append('\n')
+                }
+            }
+
+            val buf = (resultView.text as? SpannableStringBuilder) ?: SpannableStringBuilder(resultView.text)
+            buf.append(chunk)
+
+            // Cap total size to avoid ANR from extremely large TextView layouts.
+            val excess = buf.length - uiLogMaxChars
+            if (excess > 0) {
+                buf.delete(0, excess)
+            }
+
+            if (resultView.text !== buf) resultView.text = buf
+
+            // Auto-scroll to bottom for new logs
+            resultView.post {
+                try {
+                    val scrollAmount = (resultView.layout?.getLineTop(resultView.lineCount) ?: 0) - resultView.height
+                    if (scrollAmount > 0) resultView.scrollTo(0, scrollAmount) else resultView.scrollTo(0, 0)
+                } catch (_: Throwable) {}
+            }
+        }, 50)
     }
 
     private fun openNotificationAccessSettings() {
         if (!NotificationHelper.openNotificationListenerSettings(this)) {
-            Toast.makeText(this, "无法打开通知访问设置", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.error_open_notification_access), Toast.LENGTH_SHORT).show()
         }
     }
     
@@ -322,8 +480,8 @@ class MainActivity : AppCompatActivity() {
      */
     private fun refreshNotificationService() {
         NotificationHelper.refreshNotificationListenerService(this)
-        Toast.makeText(this, "已尝试刷新通知监听服务", Toast.LENGTH_SHORT).show()
-        appendResult("已刷新通知监听服务")
+        Toast.makeText(this, getString(R.string.toast_service_refresh_attempted), Toast.LENGTH_SHORT).show()
+        appendResult(getString(R.string.log_service_refreshed))
     }
     
     /**
@@ -331,19 +489,19 @@ class MainActivity : AppCompatActivity() {
      */
     private fun requestIgnoreBatteryOptimizations() {
         if (BatteryOptimizationHelper.isIgnoringBatteryOptimizations(this)) {
-            Toast.makeText(this, "已忽略电池优化", Toast.LENGTH_SHORT).show()
-            appendResult("电池优化状态：已忽略")
+            Toast.makeText(this, getString(R.string.toast_battery_optimization_ignored), Toast.LENGTH_SHORT).show()
+            appendResult(getString(R.string.log_battery_optimization_status_ignored))
         } else {
             if (BatteryOptimizationHelper.requestIgnoreBatteryOptimizations(this)) {
-                appendResult("已请求忽略电池优化")
+                appendResult(getString(R.string.log_battery_optimization_requested))
             } else {
                 // 尝试打开通用电池设置
                 try {
                     val intent = Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
                     startActivity(intent)
-                    appendResult("无法直接设置，已打开电池设置页")
+                    appendResult(getString(R.string.log_battery_optimization_fallback))
                 } catch (e: Exception) {
-                    appendResult("无法打开电池设置：${e.message}")
+                    appendResult(getString(R.string.log_battery_optimization_error, e.message))
                 }
             }
         }

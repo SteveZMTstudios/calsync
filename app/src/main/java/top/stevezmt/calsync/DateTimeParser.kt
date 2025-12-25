@@ -1,14 +1,23 @@
 package top.stevezmt.calsync
 
 import android.util.Log
+import com.google.android.gms.tasks.Tasks
+import com.google.mlkit.nl.entityextraction.DateTimeEntity
+import com.google.mlkit.nl.entityextraction.EntityExtraction
+import com.google.mlkit.nl.entityextraction.EntityExtractorOptions
+import com.google.mlkit.nl.entityextraction.EntityExtractionParams
+import com.google.mlkit.nl.entityextraction.Entity
+import com.xkzhangsan.time.nlp.TimeNLPUtil
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.regex.Pattern
 
 object DateTimeParser {
     private const val TAG = "DateTimeParser"
+    private val xkTimePatched = AtomicBoolean(false)
 
     // Public helper: expose current time used by parser (wall-clock now)
     // Returns current time in milliseconds (Calendar.getInstance())
@@ -22,6 +31,9 @@ object DateTimeParser {
     }
 
     data class ParseResult(val startMillis: Long, val endMillis: Long?, val title: String? = null, val location: String? = null)
+
+    @JvmStatic
+    fun extractTitleAndLocationFromText(context: android.content.Context, text: String): Pair<String?, String?> = extractTitleAndLocation(context, text)
 
     // Patterns for Chinese-style dates/times. These are examples and should be extended.
     // Accept both ASCII colon and fullwidth colon
@@ -44,6 +56,20 @@ object DateTimeParser {
             if (containsDateLike(context, p)) out.add(p.trim())
         }
         return out
+    }
+
+    /**
+     * Lightweight check: whether the text *might* contain a date/time expression.
+     * Used for battery-saver prefilter before running full parsing.
+     */
+    fun guessContainsDateTime(context: android.content.Context, text: String): Boolean {
+        val delimiters = Regex("[。！？.!?；;，,]\\s*")
+        val parts = delimiters.split(text)
+        for (p in parts) {
+            if (p.isBlank()) continue
+            if (containsDateLike(context, p)) return true
+        }
+        return false
     }
 
     private fun containsDateLike(context: android.content.Context, s: String): Boolean {
@@ -91,6 +117,26 @@ object DateTimeParser {
 
     // Overload: allow passing a fixed baseMillis so all calculations in this call share the same "now"
     fun parseDateTime(context: android.content.Context, sentence: String, baseMillis: Long): ParseResult? {
+        when (SettingsStore.getParsingEngine(context)) {
+            ParseEngine.XK_TIME -> {
+                try {
+                    XkTimeStrategy(context).tryParseWithBase(sentence, baseMillis)?.let { return it }
+                } catch (t: Throwable) {
+                    // xk-time (3rd party) may throw Error (e.g., NoClassDefFoundError on some devices).
+                    Log.w(TAG, "xk-time crashed: ${t.message}")
+                    try { NotificationUtils.sendError(context, Exception(t)) } catch (_: Throwable) {}
+                }
+            }
+            ParseEngine.AI_GGUF -> {
+                AiGgufStrategy(context).tryParseWithBase(sentence, baseMillis)?.let { return it }
+            }
+            ParseEngine.ML_KIT -> {
+                MLKitStrategy(context).tryParseWithBase(sentence, baseMillis)?.let { return it }
+            }
+            ParseEngine.BUILTIN -> {
+                // fall through to built-in pipeline below
+            }
+        }
         // Prefer explicit rule-based parsing first (handles tokens like 周五/本周五 reliably).
         try {
             val rule = RuleBasedStrategyWithContext(context)
@@ -103,7 +149,7 @@ object DateTimeParser {
 
         // Fallback to TimeNLP only if enabled and rule-based didn't match
         if (SettingsStore.isTimeNLPEnabled(context)) {
-            // Heuristic: 如果像“下午104的课挪至207进行”这类仅有地点/教室变更且没有明确时间/日期，不要回退到 TimeNLP，避免误触发
+            // Heuristic: 如果像“下午10·的课挪至207进行”这类仅有地点/教室变更且没有明确时间/日期，不要回退到 TimeNLP，避免误触发
             if (shouldSkipTimeNLPFallback(sentence)) return null
             try {
                 val nlp = TimeNLPStrategy(context)
@@ -130,22 +176,302 @@ object DateTimeParser {
             val slots = TimeNLPAdapter.parse(sentence)
             if (slots.isEmpty()) return null
             val s = slots.first()
-            val (t, loc) = extractTitleAndLocation(sentence)
+            val (t, loc) = extractTitleAndLocation(context, sentence)
             return ParseResult(s.startMillis, s.endMillis, t, loc)
         }
         fun tryParseWithBase(sentence: String, baseMillis: Long): ParseResult? {
             val slots = TimeNLPAdapter.parse(sentence, baseMillis)
             if (slots.isEmpty()) return null
             val s = slots.first()
-            val (t, loc) = extractTitleAndLocation(sentence)
+            val (t, loc) = extractTitleAndLocation(context, sentence)
             return ParseResult(s.startMillis, s.endMillis, t, loc)
         }
+    }
+
+    private class XkTimeStrategy(private val context: android.content.Context): ParsingStrategy {
+        override fun name() = "xk-time"
+        override fun tryParse(sentence: String): ParseResult? = tryParseWithBase(sentence, getNowMillis())
+
+        fun tryParseWithBase(sentence: String, baseMillis: Long): ParseResult? {
+            ensureXkTimeDecimalRegexPatched()
+            return try {
+                val baseStr = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.getDefault()).format(Date(baseMillis))
+                val results = TimeNLPUtil.parse(sentence, baseStr) ?: return null
+                val first = results.firstOrNull() ?: return null
+                val startMillis = extractMillisFromXkTimeResult(first) ?: return null
+
+                // Prefer explicit range if xk-time returns 2 items (common for "3点到5点")
+                val endMillisFromSecond = results.getOrNull(1)?.let { extractMillisFromXkTimeResult(it) }
+
+                // Or try common end-time fields/methods on the first object
+                val endMillisFromField = extractEndMillisFromXkTimeResult(first)
+
+                val endMillis = listOfNotNull(endMillisFromSecond, endMillisFromField)
+                    .firstOrNull { it > startMillis }
+
+                val (t, loc) = extractTitleAndLocation(context, sentence)
+                val defaultDuration = if (first.getIsAllDayTime() == true) 12 * 60 * 60 * 1000L else 60 * 60 * 1000L
+                ParseResult(startMillis, endMillis ?: (startMillis + defaultDuration), t, loc)
+            } catch (t: Throwable) {
+                // Important: catch Error to avoid crashing NotificationListener background worker.
+                Log.w(TAG, "xk-time parse failed: ${t.message}")
+                try { NotificationUtils.sendError(context, Exception(t)) } catch (_: Throwable) {}
+                null
+            }
+        }
+    }
+
+    private fun ensureXkTimeDecimalRegexPatched() {
+        if (xkTimePatched.get()) return
+        try {
+            val cls = Class.forName("com.xkzhangsan.time.enums.RegexEnum")
+            val target = (cls.enumConstants as? Array<out Any>)?.firstOrNull {
+                (it as? Enum<*>)?.name == "TextPreprocessDelDecimalStr"
+            }
+            if (target != null) {
+                val field = cls.getDeclaredField("rule").apply { isAccessible = true }
+                val current = field.get(target) as? String
+                if (current != null && current.startsWith("{0,1}\\d+\\.\\d*")) {
+                    field.set(target, "[-+]?\\d+\\.\\d*|[-+]?\\d*\\.\\d+")
+                }
+            }
+            try {
+                val cacheCls = Class.forName("com.xkzhangsan.time.utils.RegexCache")
+                val clear = cacheCls.getMethod("clear")
+                clear.invoke(null)
+            } catch (_: Throwable) {}
+        } catch (_: Throwable) {
+        } finally {
+            xkTimePatched.set(true)
+        }
+    }
+
+    private class AiGgufStrategy(private val context: android.content.Context): ParsingStrategy {
+        override fun name() = "AI(GGUF)"
+        override fun tryParse(sentence: String): ParseResult? = tryParseWithBase(sentence, getNowMillis())
+
+        fun tryParseWithBase(sentence: String, baseMillis: Long): ParseResult? {
+            val uri = SettingsStore.getAiGgufModelUri(context)
+            if (uri.isNullOrBlank()) return null
+
+            // Tell LLM the current time (requirement): baseMillis is the single source of truth for this parsing run.
+            val nowStr = try {
+                SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(baseMillis))
+            } catch (_: Throwable) { baseMillis.toString() }
+
+            val system = SettingsStore.getAiSystemPrompt(context)
+            // Guard: avoid extremely long prompts that slow native decode; cap at ~1200 chars.
+            val cappedSentence = if (sentence.length > 1200) sentence.take(1200) else sentence
+            val prompt = buildString {
+                appendLine(system)
+                appendLine()
+                appendLine("当前时间(now)为：$nowStr。请以此作为相对时间计算基准。")
+                appendLine("你需要从用户句子中抽取日程信息，并只输出一段 JSON（不要多余文字）：")
+                appendLine("{\"startMillis\":number,\"endMillis\":number|null,\"title\":string|null,\"location\":string|null}")
+                appendLine("- startMillis/endMillis 为 Unix 毫秒时间戳")
+                appendLine("- 如果缺少结束时间，endMillis 输出 null")
+                appendLine("- 如果无法解析，输出空对象 {}")
+                appendLine()
+                appendLine("用户句子：$cappedSentence")
+            }
+
+            return try {
+                NotificationUtils.sendDebugLog(context, "[AI] 物化模型并加载中…")
+                // Temporarily force 1 thread to avoid native hangs; tune later if stable.
+                val threads = 1
+                val handle = top.stevezmt.calsync.llm.LlamaCpp.getOrInitHandle(context, uri, 2048, threads)
+                if (handle == 0L) {
+                    NotificationUtils.sendDebugLog(context, "[AI] 模型加载失败：handle=0")
+                    return null
+                }
+                NotificationUtils.sendDebugLog(context, "[AI] 模型就绪，threads=$threads，开始生成…")
+
+                val startMs = android.os.SystemClock.elapsedRealtime()
+                NotificationUtils.sendDebugLog(context, "[AI] 即将调用 nativeComplete，maxTokens=64")
+                val raw = top.stevezmt.calsync.llm.LlamaCpp.complete(handle, prompt, 64)
+                NotificationUtils.sendDebugLog(context, "[AI] nativeComplete 返回，raw.length=${raw.length}")
+                val cost = android.os.SystemClock.elapsedRealtime() - startMs
+                if (raw.isEmpty()) {
+                    NotificationUtils.sendDebugLog(context, "[AI] 生成结束，但无输出，耗时 ${cost}ms")
+                } else {
+                    NotificationUtils.sendDebugLog(context, "[AI] 生成完成，耗时 ${cost}ms")
+                }
+                try {
+                    val short = if (raw.length > 800) raw.take(800) + "..." else raw
+                    NotificationUtils.sendDebugLog(context, "[AI raw] $short")
+                } catch (_: Throwable) {}
+
+                val json = extractFirstJsonObject(raw) ?: return null
+                parseAiJsonToResult(json)
+            } catch (t: Throwable) {
+                Log.w(TAG, "AI GGUF parse failed: ${t.message}")
+                try { NotificationUtils.sendError(context, Exception(t)) } catch (_: Throwable) {}
+                null
+            }
+        }
+    }
+
+    internal class MLKitStrategy(private val context: android.content.Context) : ParsingStrategy {
+        override fun name() = "ML Kit"
+        override fun tryParse(sentence: String): ParseResult? = tryParseWithBase(sentence, getNowMillis())
+
+        fun tryParseWithBase(sentence: String, baseMillis: Long): ParseResult? {
+            return try {
+                Log.d("MLKitStrategy", "Starting ML Kit parsing for: $sentence")
+                val options = EntityExtractorOptions.Builder(EntityExtractorOptions.CHINESE).build()
+                val extractor = EntityExtraction.getClient(options)
+
+                // Note: This may require Google Play Services to download the model on first run.
+                // The download is typically handled by GMS in the background.
+                Log.d("MLKitStrategy", "Checking/Downloading ML Kit model...")
+                Tasks.await(extractor.downloadModelIfNeeded())
+                Log.d("MLKitStrategy", "Model is ready.")
+
+                val params = EntityExtractionParams.Builder(sentence)
+                    .setReferenceTime(baseMillis)
+                    .build()
+
+                Log.d("MLKitStrategy", "Annotating text...")
+                val annotations = Tasks.await(extractor.annotate(params))
+                Log.d("MLKitStrategy", "Found ${annotations.size} annotations.")
+
+                var start: Long? = null
+                var end: Long? = null
+                var loc: String? = null
+
+                for (annotation in annotations) {
+                    for (entity in annotation.entities) {
+                        when {
+                            entity is DateTimeEntity -> {
+                                if (start == null) {
+                                    start = entity.timestampMillis
+                                } else if (end == null) {
+                                    end = entity.timestampMillis
+                                }
+                            }
+                            entity.type == Entity.TYPE_ADDRESS -> {
+                                loc = annotation.annotatedText
+                            }
+                        }
+                    }
+                }
+
+                if (start != null) {
+                    ParseResult(start, end, null, loc)
+                } else null
+            } catch (e: Exception) {
+                Log.w("MLKitStrategy", "ML Kit parsing failed: ${e.message}")
+                null
+            }
+        }
+
+        fun extractTitleAndLocation(sentence: String): Pair<String?, String?> {
+            return try {
+                Log.d("MLKitStrategy", "Extracting title/loc using ML Kit: $sentence")
+                val options = EntityExtractorOptions.Builder(EntityExtractorOptions.CHINESE).build()
+                val extractor = EntityExtraction.getClient(options)
+                
+                Log.d("MLKitStrategy", "Checking/Downloading ML Kit model for extraction...")
+                Tasks.await(extractor.downloadModelIfNeeded())
+                
+                val params = EntityExtractionParams.Builder(sentence).build()
+                val annotations = Tasks.await(extractor.annotate(params))
+                Log.d("MLKitStrategy", "Extraction found ${annotations.size} annotations.")
+
+                var loc: String? = null
+                for (annotation in annotations) {
+                    for (entity in annotation.entities) {
+                        if (entity.type == Entity.TYPE_ADDRESS) {
+                            loc = annotation.annotatedText
+                        }
+                    }
+                }
+                Pair(null, loc)
+            } catch (e: Exception) {
+                Log.w("MLKitStrategy", "ML Kit extraction failed: ${e.message}")
+                Pair(null, null)
+            }
+        }
+    }
+
+    private fun extractFirstJsonObject(raw: String): String? {
+        val s = raw.trim()
+        if (s.isEmpty()) return null
+        val start = s.indexOf('{')
+        if (start < 0) return null
+        var depth = 0
+        for (i in start until s.length) {
+            val ch = s[i]
+            if (ch == '{') depth++
+            if (ch == '}') {
+                depth--
+                if (depth == 0) return s.substring(start, i + 1)
+            }
+        }
+        return null
+    }
+
+    private fun parseAiJsonToResult(json: String): ParseResult? {
+        return try {
+            val obj = org.json.JSONObject(json)
+            if (obj.length() == 0) return null
+            val start = if (obj.has("startMillis")) obj.optLong("startMillis", -1L) else -1L
+            if (start <= 0) return null
+            val end = if (obj.isNull("endMillis")) null else obj.optLong("endMillis", 0L).takeIf { it > 0 }
+            val title = obj.optString("title", "").takeIf { it.isNotBlank() }
+            val loc = obj.optString("location", "").takeIf { it.isNotBlank() }
+            ParseResult(start, end, title, loc)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun extractMillisFromXkTimeResult(result: Any): Long? {
+        // Known API from xk-time: getTime() / time: Date
+        try {
+            val m = result.javaClass.methods.firstOrNull { it.name == "getTime" && it.parameterTypes.isEmpty() }
+            val dt = m?.invoke(result) as? Date
+            if (dt != null) return dt.time
+        } catch (_: Throwable) {}
+
+        // Fallback: public field named 'time'
+        try {
+            val f = result.javaClass.fields.firstOrNull { it.name == "time" } ?: return null
+            val dt = f.get(result) as? Date
+            if (dt != null) return dt.time
+        } catch (_: Throwable) {}
+
+        return null
+    }
+
+    private fun extractEndMillisFromXkTimeResult(result: Any): Long? {
+        val candidates = listOf(
+            "getEndTime",
+            "getTimeEnd",
+            "getEnd",
+            "getEndDate",
+            "getEndDatetime",
+            "getTimeEndDate"
+        )
+        for (m in candidates) {
+            try {
+                val method = result.javaClass.methods.firstOrNull { it.name == m && it.parameterTypes.isEmpty() } ?: continue
+                val v = method.invoke(result)
+                when (v) {
+                    is Date -> return v.time
+                    is Long -> return v
+                }
+            } catch (_: Throwable) {
+            }
+        }
+        return null
     }
 
     // Original rule-based without context (legacy API)
     private object RuleBasedStrategy: ParsingStrategy {
         override fun name() = "RuleBaseNoCtx"
         override fun tryParse(sentence: String): ParseResult? = parseDateTimeInternal(
+            null,
             sentence,
             relativeMap = buildDefaultRelativeTokenMap(),
             baseMillis = null,
@@ -161,12 +487,12 @@ object DateTimeParser {
             val map = buildRelativeTokenMap(ctx)
             // read preferFuture tri-state from settings (null=auto, true=prefer future, false=disable)
             val prefer = SettingsStore.getPreferFutureBoolean(ctx)
-            return parseDateTimeInternal(sentence, map, baseMillis = null, preferFutureOpt = prefer)
+            return parseDateTimeInternal(ctx, sentence, map, baseMillis = null, preferFutureOpt = prefer)
         }
         fun tryParseWithBase(sentence: String, baseMillis: Long): ParseResult? {
             val map = buildRelativeTokenMap(ctx)
             val prefer = SettingsStore.getPreferFutureBoolean(ctx)
-            return parseDateTimeInternal(sentence, map, baseMillis, prefer)
+            return parseDateTimeInternal(ctx, sentence, map, baseMillis, prefer)
         }
     }
 
@@ -234,6 +560,7 @@ object DateTimeParser {
     }
 
     private fun parseDateTimeInternal(
+        ctx: android.content.Context?,
         sentence: String,
         relativeMap: LinkedHashMap<String, RelativeSpec>? = null,
         baseMillis: Long? = null,
@@ -249,7 +576,7 @@ object DateTimeParser {
                 if (dm != null) {
                     val mo = toArabic(dm.groupValues[2])
                     val dd = toArabic(dm.groupValues[3])
-                    val ampm = dm.groupValues.getOrNull(4)?.ifBlank { null }
+                    val ampm = dm.groupValues.getOrNull(332)?.ifBlank { null }
                     val hhStr = dm.groupValues.getOrNull(5)?.ifBlank { null }
                     val mmStr = dm.groupValues.getOrNull(6)?.ifBlank { null }
                     val endCal = newCal(baseMillis)
@@ -268,7 +595,7 @@ object DateTimeParser {
                     endCal.set(Calendar.SECOND, 0)
                     val end = endCal.timeInMillis
                     val start = end - 30 * 60 * 1000L
-                    val (t, loc) = extractTitleAndLocation(sentence)
+                    val (t, loc) = extractTitleAndLocation(ctx, sentence)
                     return ParseResult(start, end, t ?: "截止", loc)
                 }
             }
@@ -285,7 +612,7 @@ object DateTimeParser {
             // --- (A) 相对偏移解析 参考 xk-time TimeNLP 中 normBaseRelated / normBaseTimeRelated / normCurRelated 的语义思想 ---
             // 支持: 3天后 / 2小时后 / 1个半小时后 / 30分钟后 / 10分钟30秒后 / 半小时后 / 45秒后 / 2天3小时20分钟后
             // 以及 X天前 / X小时前 / X分钟前 / X秒前
-            parseRelativeOffset(sentence, baseMillis)?.let { return it }
+            parseRelativeOffset(ctx, sentence, baseMillis)?.let { return it }
 
             // Chaoxing style countdown: 还有24个小时 / 还有2天3小时 / 还有90分钟 / 还有1天2小时30分钟5秒
             // Use a simple, balanced regex to quickly detect countdown phrases (we parse units sequentially below).
@@ -321,7 +648,7 @@ object DateTimeParser {
                         add(Calendar.SECOND, seconds)
                     }
                     val start = deadline.timeInMillis - 30*60*1000L // arbitrary start: deadline 前 30 分钟
-                    val (t, loc) = extractTitleAndLocation(sentence)
+                    val (t, loc) = extractTitleAndLocation(ctx, sentence)
                     val title = t ?: "截止" // Provide a neutral title if none
                     Log.d(TAG, "countdown parsed: start=${Date(start)} end=${Date(deadline.timeInMillis)} title=$title loc=$loc")
                     return ParseResult(start, deadline.timeInMillis, title, loc)
@@ -356,7 +683,7 @@ object DateTimeParser {
                         val endDt = fmt.parse(endStr)
                         if (startDt != null && endDt != null) {
                             Log.d(TAG, "explicit datetime range parsed: start=$startStr end=$endStr")
-                            val (t, loc) = extractTitleAndLocation(sentence)
+                            val (t, loc) = extractTitleAndLocation(ctx, sentence)
                             return ParseResult(startDt.time, endDt.time, t, loc)
                         }
                     } catch (e: Exception) {
@@ -374,7 +701,7 @@ object DateTimeParser {
                     val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
                     val dt = fmt.parse(dtStr)
                     if (dt != null) {
-                        val (t, loc) = extractTitleAndLocation(sentence)
+                        val (t, loc) = extractTitleAndLocation(ctx, sentence)
                         return ParseResult(dt.time, dt.time + 60 * 60 * 1000L, t, loc)
                     }
                 }
@@ -412,7 +739,7 @@ object DateTimeParser {
                     }
                     val end = cal.timeInMillis
                     val start = end - 60*60*1000L
-                    val (t, loc) = extractTitleAndLocation(sentence)
+                    val (t, loc) = extractTitleAndLocation(ctx, sentence)
                     val title = t ?: "截止"
                     return ParseResult(start, end, title, loc)
                 }
@@ -466,7 +793,7 @@ object DateTimeParser {
                     }
                     val start = cal.timeInMillis
                     val end = start + 60 * 60 * 1000L
-                    val (t, loc) = extractTitleAndLocation(sentence)
+                    val (t, loc) = extractTitleAndLocation(ctx, sentence)
                     Log.d(TAG, "relative month+day matched: ${Date(start)}")
                     return ParseResult(start, end, t, loc)
                 }
@@ -501,7 +828,7 @@ object DateTimeParser {
                     endCal.set(Calendar.MINUTE, 0)
                     endCal.set(Calendar.SECOND, 0)
 
-                    val (t, loc) = extractTitleAndLocation(sentence)
+                    val (t, loc) = extractTitleAndLocation(ctx, sentence)
                     Log.d(TAG, "month/day range matched: start=${Date(startCal.timeInMillis)} end=${Date(endCal.timeInMillis)}")
                     return ParseResult(startCal.timeInMillis, endCal.timeInMillis, t, loc)
                 }
@@ -558,7 +885,7 @@ object DateTimeParser {
                     }
                 }
                 val end = cal.timeInMillis + 60 * 60 * 1000L
-                val (t, loc) = extractTitleAndLocation(sentence)
+                val (t, loc) = extractTitleAndLocation(ctx, sentence)
                 Log.d(TAG, "month/day matched: ${Date(cal.timeInMillis)}")
                 return ParseResult(cal.timeInMillis, end, t, loc)
             }
@@ -579,7 +906,7 @@ object DateTimeParser {
                         next.set(Calendar.MINUTE, minute)
                         next.set(Calendar.SECOND, 0)
                         val start = next.timeInMillis
-                        val (t, loc) = extractTitleAndLocation(sentence)
+                        val (t, loc) = extractTitleAndLocation(ctx, sentence)
                         Log.d(TAG, "weekday matched: start=${Date(start)}")
                         return ParseResult(start, start + 60 * 60 * 1000L, t, loc)
                     }
@@ -620,7 +947,7 @@ object DateTimeParser {
                             }
                         }
                     }
-                    val (t, loc) = extractTitleAndLocation(sentence)
+                    val (t, loc) = extractTitleAndLocation(ctx, sentence)
                     Log.d(TAG, "time-only matched: ${Date(cal.timeInMillis)}")
                     return ParseResult(cal.timeInMillis, cal.timeInMillis + 60 * 60 * 1000L, t, loc)
                 }
@@ -681,7 +1008,7 @@ object DateTimeParser {
                         cal.set(Calendar.HOUR_OF_DAY, finalHour)
                         cal.set(Calendar.MINUTE, minute)
                         cal.set(Calendar.SECOND, 0)
-                        val (t, loc) = extractTitleAndLocation(sentence)
+                        val (t, loc) = extractTitleAndLocation(ctx, sentence)
                         Log.d(TAG, "relative tokens matched ${matches.map { it.key }} -> ${Date(cal.timeInMillis)}")
                         return ParseResult(cal.timeInMillis, cal.timeInMillis + 60 * 60 * 1000L, t, loc)
                     }
@@ -731,7 +1058,7 @@ object DateTimeParser {
                     }
                     val start = wk.timeInMillis
                     val end = start + 60*60*1000L
-                    val (t, loc) = extractTitleAndLocation(sentence)
+                    val (t, loc) = extractTitleAndLocation(ctx, sentence)
                     Log.d(TAG, "weekend matched: ${Date(start)}")
                     return ParseResult(start, end, t, loc)
                 }
@@ -783,7 +1110,7 @@ object DateTimeParser {
                 targetCal.set(Calendar.HOUR_OF_DAY, finalHour)
                 targetCal.set(Calendar.MINUTE, minute)
                 targetCal.set(Calendar.SECOND, 0)
-                val (t, loc) = extractTitleAndLocation(sentence)
+                val (t, loc) = extractTitleAndLocation(ctx, sentence)
                 Log.d(TAG, "next-week matched: ${Date(targetCal.timeInMillis)}")
                 return ParseResult(targetCal.timeInMillis, targetCal.timeInMillis + 60*60*1000L, t, loc)
             }
@@ -802,7 +1129,7 @@ object DateTimeParser {
                 now.add(Calendar.MINUTE, 10)
                 val start = now.timeInMillis
                 val end = start + 60*60*1000L
-                val (t, loc) = extractTitleAndLocation(sentence)
+                val (t, loc) = extractTitleAndLocation(ctx, sentence)
                 Log.d(TAG, "fallback notice matched: ${Date(start)}")
                 return ParseResult(start, end, t ?: "通知", loc)
             }
@@ -859,7 +1186,7 @@ object DateTimeParser {
     }
 
     // 解析相对偏移: 将『X天后』、『2小时30分钟后』等转为绝对时间 (start=end-1h 默认)；返回 null 表示不匹配
-    private fun parseRelativeOffset(sentence: String, baseMillis: Long?): ParseResult? {
+    private fun parseRelativeOffset(ctx: android.content.Context?, sentence: String, baseMillis: Long?): ParseResult? {
         // 触发词: 后, 之后, 以后, 前, 之前, 以前
         if (!sentence.contains("后") && !sentence.contains("前")) return null
         // 快速正则: 捕获形如 2天3小时20分钟10秒后 / 1个半小时后 / 半小时后
@@ -908,7 +1235,7 @@ object DateTimeParser {
         val base = newCal(baseMillis)
         val target = base.timeInMillis + direction * totalMillis
         val start = if (direction > 0) target - 60 * 60 * 1000L else target // 未来: 以截止视角, 过去: 直接事件时刻
-        val (t, loc) = extractTitleAndLocation(sentence)
+        val (t, loc) = extractTitleAndLocation(ctx, sentence)
         val title = t ?: if (direction > 0) "提醒" else "事件"
         return ParseResult(start, target, title, loc)
     }
@@ -983,10 +1310,22 @@ object DateTimeParser {
     // - If sentence contains keywords like "地点" or "地点:", take following chunk as location
     // - If sentence contains a short noun phrase following a time verb (开展/举办/召集/报名/招/招募/开展/进行/开展), treat that noun as title
     // - Otherwise fallback to first few meaningful words (exclude words like 请、注意、@全体成员)
-    private fun extractTitleAndLocation(sentence: String?): Pair<String?, String?> {
+    internal fun extractTitleAndLocation(context: android.content.Context?, sentence: String?): Pair<String?, String?> {
         if (sentence.isNullOrBlank()) return Pair(null, null)
+
         var title: String? = null
         var location: String? = null
+
+        if (context != null) {
+            val engine = SettingsStore.getEventParsingEngine(context)
+            if (engine == EventParseEngine.ML_KIT) {
+                val res = MLKitStrategy(context).extractTitleAndLocation(sentence)
+                title = res.first
+                location = res.second
+            }
+        }
+
+        if (title != null && location != null) return Pair(title, location)
 
         // 先在原文上提取地点，避免清洗时间短语时影响地点关键字识别
         // 再在去除时间/日期表达后的文本上提取标题
@@ -995,19 +1334,21 @@ object DateTimeParser {
         val cleanedForTitle = removeDateTimePhrases(sentence)
 
         // location patterns（在原文上）
-        val locRegex = Regex("(?:地点|地址|场地|地点：|地点:|位置|集合地点)\\s*[:：]?\\s*([\\u4e00-\\u9fa5A-Za-z0-9\\-—–,，。、\\s]{2,60})")
-        val locMatch = locRegex.find(sentence)
-        if (locMatch != null) {
-            location = locMatch.groupValues.getOrNull(1)?.trim()?.trimEnd('。', '，', ',')
-        } else {
-            // Also handle '到/在 XX教室|机房|实验室|报告厅|会议室' 模式
-            val locRegex2 = Regex("(?:到|在|于)\\s*([A-Za-z0-9\\-]{1,8}[A-Za-z]?\\d{0,4}|[\\u4e00-\\u9fa5A-Za-z0-9\\-]{1,20})\\s*(教室|机房|实验室|报告厅|会议室|办公室)")
-            val m2 = locRegex2.find(sentence)
-            if (m2 != null) {
-                val b = m2.groupValues.getOrNull(1)?.trim() ?: ""
-                val suf = m2.groupValues.getOrNull(2)?.trim() ?: ""
-                val cand = (b + suf).trim()
-                if (cand.isNotBlank()) location = cand
+        if (location == null) {
+            val locRegex = Regex("(?:地点|地址|场地|地点：|地点:|位置|集合地点)\\s*[:：]?\\s*([\\u4e00-\\u9fa5A-Za-z0-9\\-—–,，。、\\s]{2,60})")
+            val locMatch = locRegex.find(sentence)
+            if (locMatch != null) {
+                location = locMatch.groupValues.getOrNull(1)?.trim()?.trimEnd('。', '，', ',')
+            } else {
+                // Also handle '到/在 XX教室|机房|实验室|报告厅|会议室' 模式
+                val locRegex2 = Regex("(?:到|在|于)\\s*([A-Za-z0-9\\-]{1,8}[A-Za-z]?\\d{0,4}|[\\u4e00-\\u9fa5A-Za-z0-9\\-]{1,20})\\s*(教室|机房|实验室|报告厅|会议室|办公室)")
+                val m2 = locRegex2.find(sentence)
+                if (m2 != null) {
+                    val b = m2.groupValues.getOrNull(1)?.trim() ?: ""
+                    val suf = m2.groupValues.getOrNull(2)?.trim() ?: ""
+                    val cand = (b + suf).trim()
+                    if (cand.isNotBlank()) location = cand
+                }
             }
         }
         // 额外：'到XX教室' / '到XX机房' / '到教室XX' / '在21B6教室' 模式提取

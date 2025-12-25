@@ -3,14 +3,14 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="16dp"
-    android:background="?attr/colorPrimary">
+    android:padding="24dp"
+    android:gravity="center"
+    android:background="?attr/colorPrimaryContainer">
 
     <ImageView
-        android:layout_width="64dp"
-        android:layout_height="64dp"
-        android:layout_gravity="center"
-        android:layout_marginBottom="8dp"
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:layout_marginBottom="12dp"
         android:src="@mipmap/ic_launcher"
         android:contentDescription="App Icon" />
 
@@ -18,20 +18,17 @@
         android:id="@+id/nav_header_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
         android:text="@string/app_name"
-        android:textColor="@android:color/white"
-        android:textSize="18sp"
+        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
         android:textStyle="bold" />
 
     <TextView
         android:id="@+id/nav_header_version"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
+        android:layout_marginTop="4dp"
         android:text=""
-        android:textColor="@android:color/white"
-        android:alpha="0.8"
-        android:textSize="14sp" />
+        android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+        android:alpha="0.8" />
 
 </LinearLayout>

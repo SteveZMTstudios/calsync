@@ -28,15 +28,37 @@ object CalendarHelper {
                 put(CalendarContract.Events.CALENDAR_ID, calendarId)
                 if (!location.isNullOrBlank()) put(CalendarContract.Events.EVENT_LOCATION, location)
                 put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+                // Set HAS_ALARM to 1 if we have a reminder configured
+                if (SettingsStore.getReminderMinutes(context) >= 0) {
+                    put(CalendarContract.Events.HAS_ALARM, 1)
+                }
             }
             val uri: Uri? = cr.insert(CalendarContract.Events.CONTENT_URI, values)
             if (uri != null) {
                 Log.i(TAG, "Inserted event: $uri")
-                return try {
+                val eventId = try {
                     android.content.ContentUris.parseId(uri)
                 } catch (_: Exception) {
                     null
                 }
+
+                if (eventId != null) {
+                    val reminderMinutes = SettingsStore.getReminderMinutes(context)
+                    if (reminderMinutes >= 0) {
+                        try {
+                            val reminderValues = ContentValues().apply {
+                                put(CalendarContract.Reminders.EVENT_ID, eventId)
+                                put(CalendarContract.Reminders.MINUTES, reminderMinutes)
+                                put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
+                            }
+                            cr.insert(CalendarContract.Reminders.CONTENT_URI, reminderValues)
+                            Log.i(TAG, "Added reminder: $reminderMinutes minutes before")
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to add reminder", e)
+                        }
+                    }
+                }
+                return eventId
             } else {
                 Log.w(TAG, "Failed to insert event")
             }

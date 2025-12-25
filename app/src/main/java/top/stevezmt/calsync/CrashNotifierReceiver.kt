@@ -35,9 +35,7 @@ class CrashNotifierReceiver : BroadcastReceiver() {
         val openIntent = Intent(context, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
-        val flags = if (Build.VERSION.SDK_INT >= 23)
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        else PendingIntent.FLAG_UPDATE_CURRENT
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         val openPi = PendingIntent.getActivity(context, 0xCAFE, openIntent, flags)
 
         // Copy action reuses ErrorNotificationReceiver to put the stack to clipboard

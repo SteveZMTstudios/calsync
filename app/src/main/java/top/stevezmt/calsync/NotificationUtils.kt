@@ -28,6 +28,24 @@ object NotificationUtils {
 	// baseMillis used by parser when creating this event (System.currentTimeMillis captured at processing start)
 	const val EXTRA_EVENT_BASE = "extra_event_base"
 
+	// Debug log broadcast (for MainActivity UI)
+	const val ACTION_DEBUG_LOG = "top.stevezmt.calsync.ACTION_DEBUG_LOG"
+	const val EXTRA_DEBUG_LINE = "extra_debug_line"
+
+	fun sendDebugLog(context: Context, line: String) {
+		try {
+			val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+			val entry = "[$ts] $line"
+			try { NotificationCache.add(context, entry) } catch (_: Throwable) {}
+			try {
+				val i = Intent(ACTION_DEBUG_LOG)
+				i.setPackage(context.packageName)
+				i.putExtra(EXTRA_DEBUG_LINE, entry)
+				context.sendBroadcast(i)
+			} catch (_: Throwable) {}
+		} catch (_: Throwable) {}
+	}
+
 	fun ensureChannels(context: Context) {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
 			val nm = context.getSystemService(NotificationManager::class.java)

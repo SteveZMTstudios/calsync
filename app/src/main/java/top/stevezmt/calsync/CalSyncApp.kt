@@ -7,19 +7,30 @@ import android.os.Bundle
 import android.util.Log
 import android.view.View
 import androidx.core.view.isNotEmpty
+import com.google.android.material.color.DynamicColors
 
 class CalSyncApp : Application() {
     @SuppressLint("MissingPermission")
     override fun onCreate() {
         super.onCreate()
+        // Apply Material 3 Dynamic Colors (wallpaper-based)
+        DynamicColors.applyToActivitiesIfAvailable(this)
+
         // Register a lifecycle callback to apply top inset padding to each activity's content view
         registerActivityLifecycleCallbacks(object: ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
                 try {
                     val content = activity.findViewById<View>(android.R.id.content)
-                    // content is a FrameLayout whose first child is the activity's root view; apply on it
                     val root = if (content is android.view.ViewGroup && content.isNotEmpty()) content.getChildAt(0) else content
-                    root?.let { InsetsHelper.applyTopInsetOnce(it) }
+                    
+                    // Try to find AppBarLayout first for M3 top bar effect
+                    val appBar = activity.findViewById<View>(R.id.app_bar_layout) 
+                    
+                    if (appBar != null) {
+                        InsetsHelper.applyTopInsetOnce(appBar)
+                    } else {
+                        root?.let { InsetsHelper.applyTopInsetOnce(it) }
+                    }
                 } catch (_: Exception) {
                     // ignore
                 }
@@ -49,9 +60,7 @@ class CalSyncApp : Application() {
                     action = CrashNotifierReceiver.ACTION_SHOW_CRASH
                     putExtra(CrashNotifierReceiver.EXTRA_STACK, msg.take(2000)) // backup
                 }
-                val flags = if (android.os.Build.VERSION.SDK_INT >= 23)
-                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-                else android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                val flags = android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
                 val pi = android.app.PendingIntent.getBroadcast(this, 0xC0DE, intent, flags)
                 val am = getSystemService(android.app.AlarmManager::class.java)
                 val triggerAt = System.currentTimeMillis() + 2000
@@ -66,15 +75,9 @@ class CalSyncApp : Application() {
                         } else {
                             Log.w("CalSync", "App not allowed to schedule exact alarms")
                         }
-                    } else if (am != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    } else if (am != null) {
                         try {
                             am.setExactAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, triggerAt, pi)
-                        } catch (e: SecurityException) {
-                            Log.w("CalSync", "No SCHEDULE_EXACT_ALARM permission: ${e.message}")
-                        }
-                    } else {
-                        try {
-                            am?.setExact(android.app.AlarmManager.RTC_WAKEUP, triggerAt, pi)
                         } catch (e: SecurityException) {
                             Log.w("CalSync", "No SCHEDULE_EXACT_ALARM permission: ${e.message}")
                         }
