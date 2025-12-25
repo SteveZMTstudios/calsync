@@ -41,21 +41,26 @@
 minSDK: 23
 tarSDK: 36
 
-### 权限列表  
+### 权限列表和说明  
 - android.permission.READ_CALENDAR
-  读取日历活动和详情
+  读取日历活动和详情  
+  必需的权限，它用于添加到特定日历和链接到日历事件的通知提示。
 - android.permission.WRITE_CALENDAR
-  添加或修改日历活动
+  添加或修改日历活动  
+  必需的权限，它用于添加到特定日历和链接到日历事件的通知提示。
 - android.permission.FOREGROUND_SERVICE
-  允许在前台运行服务
+  允许在前台运行服务  
+  必需的权限，它用于在后台持续监听通知。若拒绝此权限，应用将无法持续运作。
 - android.permission.FOREGROUND_SERVICE_SPECIAL_USE
   允许在前台运行特殊用途服务（用于通知监听和保活）
 - android.permission.POST_NOTIFICATIONS
-  允许发送通知
+  允许发送通知  
+  可选的权限，拒绝将导致您无法知晓哪些日历被更改或程序崩溃，也无法从通知中删除或编辑创建的日历。
 - android.permission.SCHEDULE_EXACT_ALARM
   允许设置精确闹钟（用于崩溃后的通知提醒）
 - android.permission.QUERY_ALL_PACKAGES
-  允许查询所有已安装的应用包（用于应用过滤功能）
+  允许查询所有已安装的应用包  
+  可选的权限，允许用户选取要检查通知的应用。若拒绝此权限，用户只能选择预设的应用包，或选择匹配所有通知来源。  
 - android.permission.BIND_NOTIFICATION_LISTENER_SERVICE
   允许应用读取所有通知（核心功能）
 

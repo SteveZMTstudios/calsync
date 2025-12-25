@@ -69,6 +69,11 @@ android {
             output.outputFileName = "calsync-${versionName}-${abi}.apk"
         }
     }
+
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
 }
 
 dependencies {
