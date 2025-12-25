@@ -99,29 +99,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release_artifacts
-          # Standard apk paths
-          DEBUG_APK=app/build/outputs/apk/debug/app-debug.apk
-          RELEASE_APK=app/build/outputs/apk/release/app-release.apk
-
-          COPIED=0
-          if [ -f "$DEBUG_APK" ]; then
-            cp "$DEBUG_APK" release_artifacts/app-debug.apk
-            COPIED=$((COPIED+1))
-          else
-            echo "Debug APK not found at $DEBUG_APK"
+          
+          # 搜集所有生成的 APK (包括不同架构和 universal 包)
+          find app/build/outputs/apk/ -name "*.apk" -exec cp {} release_artifacts/ \;
+          
+          # 检查是否搜集到了文件
+          COUNT=$(ls release_artifacts/*.apk | wc -l)
+          if [ "$COUNT" -eq 0 ]; then
+            echo "No APKs found. Listing outputs for debugging:"
+            ls -R app/build/outputs/apk/ || true
+            exit 1
           fi
-
-          if [ -f "$RELEASE_APK" ]; then
-            cp "$RELEASE_APK" release_artifacts/app-release.apk
-            COPIED=$((COPIED+1))
-          else
-            echo "Release APK not found at $RELEASE_APK"
-          fi
-
-          if [ $COPIED -ne 2 ]; then
-            echo "Missing apk. Listing outputs for debugging:"
-            ls -R app/build || true
-          fi
+          echo "Found $COUNT APKs."
 
       - name: Compute release metadata
         id: meta
@@ -184,6 +173,4 @@ jobs:
           name: ${{ steps.meta.outputs.release_name }}
           body: ${{ steps.meta.outputs.body }}
           fail_on_unmatched_files: false
-          files: |
-            release_artifacts/app-debug.apk
-            release_artifacts/app-release.apk
+          files: release_artifacts/*.apk
