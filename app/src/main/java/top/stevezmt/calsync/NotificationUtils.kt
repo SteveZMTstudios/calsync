@@ -33,6 +33,7 @@ object NotificationUtils {
 	const val EXTRA_DEBUG_LINE = "extra_debug_line"
 
 	fun sendDebugLog(context: Context, line: String) {
+		if (!BuildConfig.DEBUG) return
 		try {
 			val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
 			val entry = "[$ts] $line"

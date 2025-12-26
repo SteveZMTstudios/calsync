@@ -3,6 +3,7 @@ package top.stevezmt.calsync
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Looper
@@ -89,7 +90,7 @@ class MainActivity : AppCompatActivity() {
                     val start = intent.getLongExtra(NotificationUtils.EXTRA_EVENT_START, 0L)
                     val base = intent.getLongExtra(NotificationUtils.EXTRA_EVENT_BASE, -1L)
                     appendResult("事件创建: id=$id title=$title start=${java.text.SimpleDateFormat("M月d日 H:mm", java.util.Locale.getDefault()).format(java.util.Date(start))}")
-                    if (base > 0) {
+                    if (base > 0 && BuildConfig.DEBUG) {
                         appendResult("解析时的 now (DateTimeParser base): ${DateTimeParser.getNowFormatted()}  (wall clock now); parser baseMillis=$base")
                     }
                 }
@@ -196,13 +197,15 @@ class MainActivity : AppCompatActivity() {
         if (!SettingsStore.isPrivacyAccepted(this)) {
             showPrivacyDialog()
         } else {
-            onPrivacyAccepted()
+            onPrivacyAccepted(fromDialog = false)
         }
 
         // Print DateTimeParser current now/time when opening main UI
-        try {
-            appendResult("DateTimeParser now: ${DateTimeParser.getNowFormatted()}")
-        } catch (_: Throwable) {}
+        if (BuildConfig.DEBUG) {
+            try {
+                appendResult("DateTimeParser now: ${DateTimeParser.getNowFormatted()}")
+            } catch (_: Throwable) {}
+        }
 
         // Load recent logs captured in background (avoid blocking UI thread)
         try {
@@ -223,7 +226,7 @@ class MainActivity : AppCompatActivity() {
             .setCancelable(false)
             .setPositiveButton(R.string.btn_agree) { _, _ ->
                 SettingsStore.setPrivacyAccepted(this, true)
-                onPrivacyAccepted()
+                onPrivacyAccepted(fromDialog = true)
             }
             .setNegativeButton(R.string.btn_disagree) { _, _ ->
                 finish()
@@ -241,10 +244,14 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun onPrivacyAccepted() {
+    private fun onPrivacyAccepted(fromDialog: Boolean) {
         if (SettingsStore.isKeepAliveEnabled(this)) startKeepAlive()
         updateCalendarIndicator()
-        checkNotificationListenerStatus()
+        
+        // 仅在从对话框点击同意时检查，避免 onCreate 和 onResume 重复弹出
+        if (fromDialog) {
+            checkNotificationListenerStatus()
+        }
 
         requestCalendarRuntime()
 
@@ -382,6 +389,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestCalendarRuntime() {
+        val hasWrite = checkSelfPermission(Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED
+        val hasRead = checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
+
+        if (hasWrite && !hasRead) {
+            // 检测到“仅允许创建”权限（常见于 MIUI 等 ROM）
+            AlertDialog.Builder(this)
+                .setTitle("需要完整日历权限")
+                .setMessage("检测到您仅授予了“仅允许创建”权限。由于系统限制，应用需要“读取”权限才能列出日历并自动选择默认日历。请在接下来的弹窗中授予完整权限。")
+                .setPositiveButton("确定") { _, _ ->
+                    performCalendarRequest()
+                }
+                .setNegativeButton("取消", null)
+                .show()
+        } else {
+            performCalendarRequest()
+        }
+    }
+
+    private fun performCalendarRequest() {
         val perms = mutableListOf<String>().apply {
             add(Manifest.permission.WRITE_CALENDAR)
             add(Manifest.permission.READ_CALENDAR)
@@ -411,7 +437,9 @@ class MainActivity : AppCompatActivity() {
                             appendResult("成功: 事件ID=$eventId 标题=$title 开始=${java.text.SimpleDateFormat("M月d日 H:mm", java.util.Locale.getDefault()).format(java.util.Date(startMillis))}")
                         }
                         override fun onError(message: String?) { appendResult("错误: $message") }
-                        override fun onDebugLog(line: String) { appendResult("[debug] $line") }
+                        override fun onDebugLog(line: String) {
+                            if (BuildConfig.DEBUG) appendResult("[debug] $line")
+                        }
                     }
                 )
                 if (!res.handled) appendResult("未处理: ${res.reason}")

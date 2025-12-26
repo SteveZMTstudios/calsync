@@ -84,6 +84,7 @@ class NotificationStatusActivity : AppCompatActivity() {
     }
 
     private fun refreshStatus() {
+        statusView.text = "" // Clear before refresh
         try {
             val nm = getSystemService(NotificationManager::class.java)
             val enabled = NotificationManagerCompat.from(this).areNotificationsEnabled()
@@ -92,6 +93,14 @@ class NotificationStatusActivity : AppCompatActivity() {
             // Check if notification listener is enabled for this component
             val listenerEnabled = isNotificationListenerEnabled()
             appendLine("notificationListenerEnabled=$listenerEnabled")
+
+            // Show active notifications count if possible
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                try {
+                    val activeCount = nm?.activeNotifications?.size ?: 0
+                    appendLine("activeNotificationsCount=$activeCount")
+                } catch (_: Throwable) {}
+            }
 
             // Check our channels
             val channels = listOf(NotificationUtils.CHANNEL_CONFIRM, NotificationUtils.CHANNEL_ERROR)
@@ -109,7 +118,7 @@ class NotificationStatusActivity : AppCompatActivity() {
                 }
             }
             val recent = NotificationCache.snapshot(this)
-            appendLine("\n--- 最近收到的通知 (最多 ${recent.size}) ---")
+            appendLine("\n--- 最近捕获的通知 (数量: ${recent.size}) ---")
             recent.take(50).forEach { appendLine(it) }
         } catch (e: Exception) {
             appendLine("failed to refresh status: ${e.message}")

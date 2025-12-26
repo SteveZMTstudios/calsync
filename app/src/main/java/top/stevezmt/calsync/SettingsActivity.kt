@@ -201,12 +201,14 @@ class SettingsActivity : AppCompatActivity() {
                 SettingsStore.setParsingEngine(this, ParseEngine.BUILTIN)
                 parseEngineInput?.setText(ParseEngine.BUILTIN.displayName, false)
                 eventEngineInput?.setText(EventParseEngine.BUILTIN.displayName, false)
-                Toast.makeText(this, R.string.error_google_play_required, Toast.LENGTH_LONG).show()
+                val msg = if (BuildConfig.FLAVOR == "foss") "FOSS版本不提供闭源组件" else getString(R.string.error_google_play_required)
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
             }
         }
     }
 
     private fun isGooglePlayServicesAvailable(): Boolean {
+        if (BuildConfig.FLAVOR == "foss") return false
         return try {
             packageManager.getPackageInfo("com.google.android.gms", 0)
             true
@@ -260,6 +262,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun setupParsingEngineUi() {
         try {
+            val isFoss = BuildConfig.FLAVOR == "foss"
             val isGmsAvailable = isGooglePlayServicesAvailable()
             val engines = ParseEngine.entries
             val adapter = object : android.widget.ArrayAdapter<ParseEngine>(this, R.layout.item_engine_option, engines) {
@@ -279,6 +282,7 @@ class SettingsActivity : AppCompatActivity() {
 
                 override fun isEnabled(position: Int): Boolean {
                     val item = getItem(position)
+                    if (isFoss && item == ParseEngine.ML_KIT) return true
                     return !(item == ParseEngine.ML_KIT && !isGmsAvailable)
                 }
             }
@@ -287,6 +291,13 @@ class SettingsActivity : AppCompatActivity() {
 
             parseEngineInput?.setOnItemClickListener { _, _, pos, _ ->
                 val picked = engines.getOrNull(pos) ?: ParseEngine.BUILTIN
+                
+                if (isFoss && picked == ParseEngine.ML_KIT) {
+                    Toast.makeText(this, "FOSS版本不提供闭源组件", Toast.LENGTH_SHORT).show()
+                    parseEngineInput?.setText(SettingsStore.getParsingEngine(this).displayName, false)
+                    return@setOnItemClickListener
+                }
+
                 // Show warning dialog if selecting AI_GGUF
                 if (picked == ParseEngine.AI_GGUF) {
                     showAiWarningDialog { confirmed ->
@@ -310,6 +321,7 @@ class SettingsActivity : AppCompatActivity() {
         } catch (_: Throwable) {}
 
         try {
+            val isFoss = BuildConfig.FLAVOR == "foss"
             val isGmsAvailable = isGooglePlayServicesAvailable()
             val engines = EventParseEngine.entries
             val adapter = object : android.widget.ArrayAdapter<EventParseEngine>(this, R.layout.item_engine_option, engines) {
@@ -329,6 +341,7 @@ class SettingsActivity : AppCompatActivity() {
 
                 override fun isEnabled(position: Int): Boolean {
                     val item = getItem(position)
+                    if (isFoss && item == EventParseEngine.ML_KIT) return true
                     return !(item == EventParseEngine.ML_KIT && !isGmsAvailable)
                 }
             }
@@ -337,6 +350,13 @@ class SettingsActivity : AppCompatActivity() {
 
             eventEngineInput?.setOnItemClickListener { _, _, pos, _ ->
                 val picked = engines.getOrNull(pos) ?: EventParseEngine.BUILTIN
+
+                if (isFoss && picked == EventParseEngine.ML_KIT) {
+                    Toast.makeText(this, "FOSS版本不提供闭源组件", Toast.LENGTH_SHORT).show()
+                    eventEngineInput?.setText(SettingsStore.getEventParsingEngine(this).displayName, false)
+                    return@setOnItemClickListener
+                }
+
                 // Show warning dialog if selecting AI_GGUF
                 if (picked == EventParseEngine.AI_GGUF) {
                     showAiWarningDialog { confirmed ->

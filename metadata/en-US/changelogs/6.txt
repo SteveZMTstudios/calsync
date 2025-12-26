@@ -1,4 +1,4 @@
-**WARNING: This version introduced ML Kit that is closed-source from Google to improve time and entity extraction for Chinese notifications. If you prefer a fully open-source version, please continue using the 0.0.x versions.**
+**WARNING: This version introduced ML Kit that is closed-source from Google to improve time and entity extraction for Chinese notifications. If you prefer a fully open-source version, please switch to the FOSS version.**
 ## Core enhancements
 - Introduced Google ML Kit engine: added ML-based time and entity extraction, significantly improving recognition accuracy for times, locations, and event titles in complex Chinese notifications.
 - Parsing engine integration: optimized settings logic to support seamless switching among "Built-in rules", "xk-time", and "ML Kit", and automatically synchronize time parsing with the event extraction engine.

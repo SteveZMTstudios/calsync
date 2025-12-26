@@ -53,6 +53,10 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
+      - name: Run Unit Tests
+        run: |
+          GRADLE_OPTS="-Xmx3g" ./gradlew :app:testFossDebugUnitTest :app:testFullDebugUnitTest --no-daemon
+
       - name: Accept Android SDK licenses
         run: |
           # 自动查找 sdkmanager 的位置并接受许可
@@ -117,11 +121,15 @@ jobs:
           set -euo pipefail
           mkdir -p release_artifacts
           
-          # 搜集所有生成的 APK (包括不同架构和 universal 包)
-          find app/build/outputs/apk/ -name "*.apk" -exec cp {} release_artifacts/ \;
+          # 搜集所有生成的 Release APK (包括不同架构和 universal 包)
+          # 路径示例: app/build/outputs/apk/foss/release/calsync-0.1.1-foss-universal.apk
+          find app/build/outputs/apk/*/release/ -name "*.apk" -exec cp {} release_artifacts/ \;
+          
+          # 如果也想包含 Debug APK，可以取消下面这行的注释
+          # find app/build/outputs/apk/*/debug/ -name "*.apk" -exec cp {} release_artifacts/ \;
           
           # 检查是否搜集到了文件
-          COUNT=$(ls release_artifacts/*.apk | wc -l)
+          COUNT=$(ls release_artifacts/*.apk 2>/dev/null | wc -l || echo 0)
           if [ "$COUNT" -eq 0 ]; then
             echo "No APKs found. Listing outputs for debugging:"
             ls -R app/build/outputs/apk/ || true

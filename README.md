@@ -17,8 +17,12 @@
 > 此项目包含部分**AI生成**（已经过人类审查）和人类编写修正的内容。  
 > 此项目目前仅支持**简体中文 Simplified Chinese**。
 
-尽管此应用申请了设备和通知访问权限，但是该程序本体**未使用网络访问权限**，您的数据不会被存储，也不会传出设备。  
-（注：ML Kit SDK 可能会使用网络权限进行诊断数据上报，详情见[隐私政策](POLICY.md)）
+本应用提供两个版本：
+- **FOSS 版本**：完全开源，不含闭源 SDK，**无网络权限**，提供最极致的隐私保障。
+- **Full 版本**：包含 Google ML Kit 增强解析引擎，支持更强大的实体提取。
+
+尽管此应用申请了设备和通知访问权限，但是该程序本体**未使用网络访问权限**（FOSS 版本完全不申请网络权限），您的数据不会被存储，也不会传出设备。  
+（注：Full 版本中的 ML Kit SDK 可能会使用网络权限进行诊断数据上报，详情见[隐私政策](POLICY.md)）
 
 需要 Android 6.0 或更高版本。
 
@@ -63,9 +67,14 @@ tarSDK: 36
   可选的权限，允许用户选取要检查通知的应用。若拒绝此权限，用户只能选择预设的应用包，或选择匹配所有通知来源。  
 - android.permission.BIND_NOTIFICATION_LISTENER_SERVICE
   允许应用读取所有通知（核心功能）
+- android.permission.INTERNET / ACCESS_NETWORK_STATE
+  网络访问权限（**仅限 Full 版本**）  
+  由 ML Kit SDK 引入，用于模型管理和匿名诊断上报。程序本体不使用。
 
 ### 三方库
-未引入任何三方库
+- **FOSS 版本**：未引入任何闭源三方库。
+- **Full 版本**：引入了 Google ML Kit (Entity Extraction) 用于增强解析。
+- **通用（源码集成/离线）**：集成并修改了 TimeNLP, xk-time, Jieba 等开源组件的逻辑。
 
 </details>
 
@@ -91,14 +100,26 @@ cd calsync
 
 ### 构建项目
 ```bash
-GRADLE_OPTS="-Xmx3g" ./gradlew assembleRelease
-# or
+# 构建 FOSS 版本
+./gradlew assembleFossRelease
+
+# 构建 Full 版本 (含 ML Kit)
+./gradlew assembleFullRelease
+
+# 或者构建所有变体
+./gradlew assembleRelease
+
+# 仅构建调试版本
 ./gradlew build
 ```
 
 ### 运行测试
 ```bash
-./gradlew test
+# 运行 FOSS 变体测试
+./gradlew :app:testFossDebugUnitTest
+
+# 运行 Full 变体测试
+./gradlew :app:testFullDebugUnitTest
 ```
 
 ## 鸣谢
@@ -106,6 +127,8 @@ GRADLE_OPTS="-Xmx3g" ./gradlew assembleRelease
 https://github.com/NagiYan/TimeNLP
 https://github.com/xkzhangsan/xk-time
 https://github.com/huaban/jieba-analysis
+~~https://developers.google.cn/ml-kit?hl=zh-cn~~
+
 
 ## 许可证
 

@@ -18,8 +18,8 @@ android {
         applicationId = "top.stevezmt.calsync"
         minSdk = 23
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.1.0"
+        versionCode = 7
+        versionName = "0.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -27,6 +27,21 @@ android {
             cmake {
                 cppFlags += "-std=c++17"
             }
+        }
+    }
+
+    buildFeatures {
+        buildConfig = true
+    }
+
+    flavorDimensions.add("version")
+    productFlavors {
+        create("foss") {
+            dimension = "version"
+            versionNameSuffix = "-foss"
+        }
+        create("full") {
+            dimension = "version"
         }
     }
 
@@ -42,6 +57,8 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            // TODO: Remove this before production release
+            // signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -85,7 +102,7 @@ dependencies {
     implementation(libs.jieba)
     // Natural language time parsing (Java, rule-based)
     implementation(libs.xk.time)
-    implementation(libs.mlkit.entity.extraction)
+    "fullImplementation"(libs.mlkit.entity.extraction)
     testImplementation(libs.junit)
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.kotlin)

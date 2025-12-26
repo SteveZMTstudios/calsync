@@ -10,7 +10,7 @@ class MLKitLogicTest {
     @Test
     fun testMLKitStrategy_Instantiation() {
         val context = mock<Context>()
-        val strategy = DateTimeParser.MLKitStrategy(context)
+        val strategy = MLKitStrategy(context)
         assertNotNull(strategy)
         assertEquals("ML Kit", strategy.name())
     }
