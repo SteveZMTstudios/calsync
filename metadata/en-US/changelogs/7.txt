@@ -1,0 +1,6 @@
+- **Flavor Optimization**: Officially introduced **FOSS (Fully Open Source)** and **Full (All Features)** versions.
+- **Privacy Enhancement**: FOSS version contains no closed-source SDKs and requests no internet permissions for maximum privacy.
+- **Architecture Refactor**: Refactored the parsing engine using the Strategy pattern for better extensibility.
+- **Permission Guidance**: Added guidance for "Create Only" calendar permissions found on some systems (e.g., MIUI).
+- **CI/CD Upgrade**: Automated build process now generates APKs for both flavors and includes unit testing.
+- **Privacy Policy Update**: Refined data processing descriptions for different versions.
