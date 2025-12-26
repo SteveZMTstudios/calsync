@@ -49,6 +49,10 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
+      - name: Accept Android SDK licenses
+        run: |
+          yes | sdkmanager --licenses || true
+
       - name: Build Debug APK
         run: |
           # Set JVM max heap via GRADLE_OPTS to avoid shell/PowerShell parsing issues with -Porg.gradle.jvmargs
