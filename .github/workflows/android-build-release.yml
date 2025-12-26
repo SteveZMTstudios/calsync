@@ -49,6 +49,19 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
+      - name: Accept Android SDK licenses
+        run: |
+          # 自动查找 sdkmanager 的位置并接受许可
+          SDK_MANAGER=$(find $ANDROID_HOME -name sdkmanager | head -n 1)
+          if [ -n "$SDK_MANAGER" ]; then
+            echo "Found sdkmanager at $SDK_MANAGER"
+            yes | $SDK_MANAGER --licenses || true
+          else
+            echo "sdkmanager not found in $ANDROID_HOME"
+            # 尝试直接使用环境变量中可能存在的路径
+            yes | sdkmanager --licenses || true
+          fi
+
       - name: Build Debug APK
         run: |
           # Set JVM max heap via GRADLE_OPTS to avoid shell/PowerShell parsing issues with -Porg.gradle.jvmargs
