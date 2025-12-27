@@ -10,6 +10,10 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
 # CMAKE_SOURCE_DIR = app/src/main/cpp
 set(LLAMA_DIR ${CMAKE_SOURCE_DIR}/../../../../third_party/llama.cpp)
 
+# Reproducible build fixes
+add_compile_options("-ffile-prefix-map=${LLAMA_DIR}=.")
+add_link_options("LINKER:--build-id=none")
+
 if(NOT EXISTS ${LLAMA_DIR})
     message(FATAL_ERROR "llama.cpp not found at ${LLAMA_DIR}")
 endif()

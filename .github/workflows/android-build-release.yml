@@ -8,6 +8,10 @@ on:
         required: false
         default: ''
         type: string
+  push:
+    tags:
+      - 'v*.*.*'
+
 
 env:
  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

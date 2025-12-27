@@ -18,8 +18,8 @@ android {
         applicationId = "top.stevezmt.calsync"
         minSdk = 23
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.1.1"
+        versionCode = 8
+        versionName = "0.1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -50,7 +50,7 @@ android {
             isEnable = true
             reset()
             include("arm64-v8a", "x86_64", "armeabi-v7a", "x86")
-            isUniversalApk = true
+            isUniversalApk = false
         }
     }
 
@@ -80,10 +80,25 @@ android {
     }
 
     applicationVariants.all {
+        val baseVersionCode = versionCode
         outputs.all {
             val output = this as com.android.build.gradle.internal.api.ApkVariantOutputImpl
-            val abi = output.getFilter(com.android.build.OutputFile.ABI) ?: "universal"
-            output.outputFileName = "calsync-${versionName}-${abi}.apk"
+            val abi = output.getFilter(com.android.build.OutputFile.ABI)
+
+            // Map ABI to a suffix as requested by F-Droid auditors
+            // 1 for armeabi-v7a, 2 for arm64-v8a, etc.
+            val abiSuffix = when (abi) {
+                "armeabi-v7a" -> 1
+                "arm64-v8a" -> 2
+                "x86" -> 3
+                "x86_64" -> 4
+                else -> 0 // universal or others
+            }
+
+            output.versionCodeOverride = baseVersionCode * 10 + abiSuffix
+
+            val abiName = abi ?: "universal"
+            output.outputFileName = "calsync-${versionName}-${abiName}.apk"
         }
     }
 
