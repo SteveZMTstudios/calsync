@@ -18,8 +18,8 @@ android {
         applicationId = "top.stevezmt.calsync"
         minSdk = 23
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.1.2"
+        versionCode = 10
+        versionName = "0.1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -45,11 +45,16 @@ android {
         }
     }
 
+    val requestedAbis = project.findProperty("abiFilter")?.toString()?.split(",")
     splits {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a", "x86_64", "armeabi-v7a", "x86")
+            if (requestedAbis != null) {
+                include(*requestedAbis.toTypedArray())
+            } else {
+                include("arm64-v8a", "x86_64", "armeabi-v7a", "x86")
+            }
             isUniversalApk = false
         }
     }

@@ -68,9 +68,10 @@ static std::string jstringToUtf8(JNIEnv* env, jstring s) {
 static void initBackend() {
     std::lock_guard<std::mutex> lock(g_backend_mutex);
     if (!g_backend_initialized) {
+        ggml_backend_load_all();
         llama_backend_init();
         g_backend_initialized = true;
-        LOGD("llama backend initialized");
+        LOGD("llama backend initialized with all backends");
     }
 }
 
@@ -104,9 +105,10 @@ Java_top_stevezmt_calsync_llm_LlamaCpp_nativeInit(JNIEnv* env, jclass, jstring j
         cparams.n_ctx = (uint32_t)nCtxClamped;
         cparams.n_threads = (int32_t)nThreadsClamped;
         cparams.n_threads_batch = (int32_t)nThreadsClamped;
-        // Use same values as llama-cli for better performance
-        cparams.n_batch = 2048;      // max tokens to process in parallel
-        cparams.n_ubatch = 512;      // physical batch size for prompt processing
+        
+        // Ensure n_batch and n_ubatch are within context limits
+        cparams.n_batch = std::min((uint32_t)nCtxClamped, (uint32_t)2048);
+        cparams.n_ubatch = std::min(cparams.n_batch, (uint32_t)512);
         cparams.no_perf = false;     // enable perf stats for debugging
         
         llama_context* ctx = llama_init_from_model(model, cparams);
@@ -123,7 +125,12 @@ Java_top_stevezmt_calsync_llm_LlamaCpp_nativeInit(JNIEnv* env, jclass, jstring j
         
         // Warmup: run a small decode to initialize caches
         LOGD("nativeInit: performing warmup...");
-        llama_token warmup_token = llama_vocab_bos(llama_model_get_vocab(model));
+        const llama_vocab* vocab = llama_model_get_vocab(model);
+        llama_token warmup_token = llama_vocab_bos(vocab);
+        if (warmup_token == LLAMA_TOKEN_NULL) {
+            warmup_token = 0; // Fallback to token 0 if no BOS
+        }
+        
         llama_batch warmup_batch = llama_batch_init(1, 0, 1);
         warmup_batch.token[0] = warmup_token;
         warmup_batch.pos[0] = 0;
@@ -232,9 +239,10 @@ Java_top_stevezmt_calsync_llm_LlamaCpp_nativeComplete(JNIEnv* env, jclass, jlong
         
         // Process prompt in smaller chunks to avoid hanging
         const auto t_prompt_start = std::chrono::steady_clock::now();
-        const int chunk_size = 256;  // Smaller chunks for mobile device
+        const int n_batch = llama_n_batch(ctx);
+        const int chunk_size = std::min(256, n_batch);  // Smaller chunks for mobile device
         
-        LOGD("nativeComplete: decoding %d tokens in chunks of %d", n_tok, chunk_size);
+        LOGD("nativeComplete: decoding %d tokens in chunks of %d (n_batch=%d)", n_tok, chunk_size, n_batch);
         
         llama_batch batch = llama_batch_init(chunk_size, 0, 1);
         
@@ -259,8 +267,9 @@ Java_top_stevezmt_calsync_llm_LlamaCpp_nativeComplete(JNIEnv* env, jclass, jlong
                 batch.logits[n_eval - 1] = true;
             }
             
-            if (llama_decode(ctx, batch) != 0) {
-                LOGE("nativeComplete: decode failed at chunk %d-%d", i, i + n_eval - 1);
+            int decode_res = llama_decode(ctx, batch);
+            if (decode_res != 0) {
+                LOGE("nativeComplete: decode failed at chunk %d-%d with code %d", i, i + n_eval - 1, decode_res);
                 llama_batch_free(batch);
                 return env->NewStringUTF("");
             }
@@ -340,8 +349,9 @@ Java_top_stevezmt_calsync_llm_LlamaCpp_nativeComplete(JNIEnv* env, jclass, jlong
             llama_token mutable_next = next_token;
             batch = llama_batch_get_one(&mutable_next, 1);
             
-            if (llama_decode(ctx, batch) != 0) {
-                LOGE("nativeComplete: llama_decode(gen token) failed");
+            int decode_res = llama_decode(ctx, batch);
+            if (decode_res != 0) {
+                LOGE("nativeComplete: llama_decode(gen token) failed with code %d at step %d", decode_res, i);
                 break;
             }
             
