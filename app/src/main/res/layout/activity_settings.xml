@@ -28,385 +28,452 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:clipToPadding="false"
             android:orientation="vertical"
             android:paddingBottom="32dp">
 
-            <com.google.android.material.card.MaterialCardView
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:cardCornerRadius="16dp"
-                app:cardElevation="0dp"
-                app:strokeColor="@color/md_theme_outline"
-                app:strokeWidth="1dp">
+                android:orientation="vertical"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="触发器关键字"
+                    android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:alpha="0.8"
+                    android:paddingTop="4dp"
+                    android:text="以逗号分隔；命中关键字的通知会进入解析流程。"
+                    android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:hint="如：提醒, 日程, 会议">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/edit_keywords"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="text" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="时间解析偏好"
+                    android:textAppearance="@style/TextAppearance.Material3.TitleSmall" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:alpha="0.8"
+                    android:paddingTop="4dp"
+                    android:text="控制“周三”等相对日期在已过期时是否自动顺延到未来。"
+                    android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
+
+                <RadioGroup
+                    android:id="@+id/radio_prefer_future"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="4dp">
+
+                    <RadioButton
+                        android:id="@+id/radio_auto"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="自动（尝试判断）" />
+
+                    <RadioButton
+                        android:id="@+id/radio_prefer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="偏向按未来计算" />
+
+                    <RadioButton
+                        android:id="@+id/radio_disable"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="不偏向未来计算" />
+
+                </RadioGroup>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="日期时间解析引擎"
+                    android:textAppearance="@style/TextAppearance.Material3.TitleSmall" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:alpha="0.8"
+                    android:paddingTop="4dp"
+                    android:text="负责识别“周三下午两点半”等时间表达。"
+                    android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:endIconMode="dropdown_menu">
+
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/input_parse_engine"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="选择日期时间解析引擎"
+                        android:inputType="none" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="事件解析引擎"
+                    android:textAppearance="@style/TextAppearance.Material3.TitleSmall" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:alpha="0.8"
+                    android:paddingTop="4dp"
+                    android:text="从通知正文中提取事件标题、地点和时间范围。"
+                    android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:endIconMode="dropdown_menu">
+
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/input_event_engine"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="选择事件解析引擎"
+                        android:inputType="none" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="通知队列"
+                    android:textAppearance="@style/TextAppearance.Material3.TitleSmall" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:alpha="0.8"
+                    android:paddingTop="4dp"
+                    android:text="用于合并同一会话中分开发送的日程信息。"
+                    android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:hint="队列模式"
+                    app:endIconMode="dropdown_menu">
+
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/input_notification_queue_mode"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+
+                </com.google.android.material.textfield.TextInputLayout>
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="触发器关键字"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="以逗号分隔，匹配通知文本"
-                        android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-                        android:alpha="0.8"
-                        android:paddingTop="4dp" />
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
 
                     <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:hint="如：提醒, 日程, 会议">
+                        android:layout_weight="1"
+                        android:hint="超时秒数"
+                        app:helperText="5-300">
 
                         <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/edit_keywords"
+                            android:id="@+id/edit_notification_queue_timeout"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:inputType="text" />
+                            android:inputType="number" />
+
                     </com.google.android.material.textfield.TextInputLayout>
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:text="时间解析偏好"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleSmall" />
-
-                    <RadioGroup
-                        android:id="@+id/radio_prefer_future"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:paddingTop="4dp">
-
-                        <RadioButton
-                            android:id="@+id/radio_auto"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="自动（尝试判断）" />
-
-                        <RadioButton
-                            android:id="@+id/radio_prefer"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="偏向按未来计算" />
-
-                        <RadioButton
-                            android:id="@+id/radio_disable"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="不偏向未来计算" />
-
-                    </RadioGroup>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="日期时间解析引擎"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleSmall" />
+                    <Space
+                        android:layout_width="8dp"
+                        android:layout_height="1dp" />
 
                     <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                        app:endIconMode="dropdown_menu">
+                        android:layout_weight="1"
+                        android:hint="最大条数"
+                        app:helperText="2-10">
 
-                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
-                            android:id="@+id/input_parse_engine"
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/edit_notification_queue_max_messages"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:inputType="none"
-                            android:hint="选择日期时间解析引擎" />
+                            android:inputType="number" />
 
                     </com.google.android.material.textfield.TextInputLayout>
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/ai_section"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:text="事件解析引擎"
+                        android:text="AI 模型 (GGUF)"
                         android:textAppearance="@style/TextAppearance.Material3.TitleSmall" />
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                        app:endIconMode="dropdown_menu">
-
-                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
-                            android:id="@+id/input_event_engine"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="none"
-                            android:hint="选择事件解析引擎" />
-
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <com.google.android.material.materialswitch.MaterialSwitch
-                        android:id="@+id/switch_guess_before_parse"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="省电模式：先预筛选再解析"
-                        android:checked="false" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:alpha="0.8"
                         android:paddingTop="4dp"
-                        android:text="开启后会先判断通知是否可能包含时间表达，再进入完整解析，减少耗电" 
+                        android:text="建议导入 1B / 0.8B 本地模型，存储为 gguf 文件。"
                         android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
 
-                    <LinearLayout
-                        android:id="@+id/ai_section"
+                    <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:visibility="gone">
+                        android:layout_marginTop="8dp"
+                        android:hint="模型文件 URI (content:// 或 file://)">
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="12dp"
-                            android:text="AI 模型 (GGUF)"
-                            android:textAppearance="@style/TextAppearance.Material3.TitleSmall" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:alpha="0.8"
-                            android:paddingTop="4dp"
-                            android:text="建议导入 1B / 0.8B 本地模型，存储为 gguf 文件" 
-                            android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
-
-                        <com.google.android.material.textfield.TextInputLayout
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/edit_ai_model_path"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:hint="模型文件 URI (content:// 或 file://)" >
+                            android:focusable="false"
+                            android:inputType="textUri"
+                            android:singleLine="true" />
 
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/edit_ai_model_path"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="textUri"
-                                android:singleLine="true"
-                                android:focusable="false" />
+                    </com.google.android.material.textfield.TextInputLayout>
 
-                        </com.google.android.material.textfield.TextInputLayout>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_pick_ai_model"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="选择 GGUF 模型文件"
+                        app:icon="@drawable/restore_24"
+                        app:iconGravity="textStart"
+                        app:iconPadding="12dp" />
 
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_pick_ai_model"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:hint="AI 提示词（可自定义）">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/edit_ai_prompt"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="选择 GGUF 模型文件"
-                            app:icon="@drawable/restore_24"
-                            app:iconGravity="textStart"
-                            app:iconPadding="12dp"
-                            android:layout_marginTop="6dp" />
+                            android:inputType="textMultiLine"
+                            android:minLines="3" />
 
-                        <com.google.android.material.textfield.TextInputLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:hint="AI 提示词（可自定义）">
-
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/edit_ai_prompt"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="textMultiLine"
-                                android:minLines="3" />
-
-                        </com.google.android.material.textfield.TextInputLayout>
-
-                    </LinearLayout>
+                    </com.google.android.material.textfield.TextInputLayout>
 
                 </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
 
-            <com.google.android.material.card.MaterialCardView
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginLeft="8dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginRight="8dp"
+                android:layout_marginBottom="8dp"
+                android:alpha="0.55"
+                android:background="@color/md_theme_outline" />
+
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                app:cardCornerRadius="16dp"
-                app:cardElevation="0dp"
-                app:strokeColor="@color/md_theme_outline"
-                app:strokeWidth="1dp">
+                android:orientation="vertical"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="含糊时间词对"
+                    android:textAppearance="@style/TextAppearance.Material3.TitleSmall" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:alpha="0.8"
+                    android:paddingTop="4dp"
+                    android:text="当通知只有日期和“下午”等含糊词时，用这里的默认时间补全。"
+                    android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
 
                 <LinearLayout
+                    android:id="@+id/container_fuzzy_time_pairs"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
+                    android:layout_marginTop="4dp"
+                    android:orientation="vertical" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="高级匹配（谨慎调整）"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleSmall" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_add_fuzzy_time_pair"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="添加词对"
+                    app:icon="@drawable/add_24"
+                    app:iconGravity="textStart"
+                    app:iconPadding="12dp" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:paddingTop="4dp"
-                        android:text="修改将影响正则匹配效果"
-                        android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-                        android:alpha="0.8" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_reset_fuzzy_time_pairs"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="重置默认词对"
+                    app:icon="@drawable/restart_alt_24"
+                    app:iconGravity="textStart"
+                    app:iconPadding="12dp" />
 
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:hint="日期词（逗号分隔）">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_save"
+                    style="@style/Widget.Material3.Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="保存配置"
+                    android:textAllCaps="false"
+                    app:icon="@drawable/save_24"
+                    app:iconGravity="textStart"
+                    app:iconPadding="12dp" />
 
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/edit_relative_words"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="text" />
-                    </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
 
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:hint="日期匹配规则（正则，逗号分隔）">
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginLeft="8dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginRight="8dp"
+                android:layout_marginBottom="8dp"
+                android:alpha="0.55"
+                android:background="@color/md_theme_outline" />
 
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/edit_custom_rules"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="text" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_fill_rule_template"
-                        style="@style/Widget.Material3.Button.OutlinedButton"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="规则模板"
-                        app:icon="@drawable/rule_24"
-                        app:iconGravity="textStart"
-                        app:iconPadding="12dp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_reset_relative_words"
-                        style="@style/Widget.Material3.Button.OutlinedButton"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="重置日期词"
-                        app:icon="@drawable/restart_alt_24"
-                        app:iconGravity="textStart"
-                        app:iconPadding="12dp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_save"
-                        style="@style/Widget.Material3.Button"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="保存配置"
-                        android:textAllCaps="false"
-                        app:icon="@drawable/save_24"
-                        app:iconGravity="textStart"
-                        app:iconPadding="12dp" />
-
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                app:cardCornerRadius="16dp"
-                app:cardElevation="0dp"
-                app:strokeColor="@color/md_theme_outline"
-                app:strokeWidth="1dp">
+                android:orientation="vertical"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp">
 
-                <LinearLayout
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="日历与提醒"
+                    android:textAppearance="@style/TextAppearance.Material3.TitleSmall" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:alpha="0.8"
+                    android:paddingTop="4dp"
+                    android:text="配置日程写入权限、监听权限、来源应用和默认提醒时间。"
+                    android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
+
+                <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
+                    android:layout_marginTop="8dp"
+                    android:hint="提前提醒时间（分钟）"
+                    app:helperText="0为准时提醒，-1为不提醒">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="日历与提醒"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleSmall" />
-
-                    <com.google.android.material.textfield.TextInputLayout
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/edit_reminder_minutes"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:hint="提前提醒时间（分钟）"
-                        app:helperText="0为准时提醒，-1为不提醒">
+                        android:inputType="numberSigned" />
 
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/edit_reminder_minutes"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="numberSigned" />
-                    </com.google.android.material.textfield.TextInputLayout>
+                </com.google.android.material.textfield.TextInputLayout>
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_request_permission"
-                        style="@style/Widget.Material3.Button.OutlinedButton"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="请求日历权限"
-                        app:icon="@drawable/event_available_24"
-                        app:iconGravity="textStart"
-                        app:iconPadding="12dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_request_permission"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="请求日历权限"
+                    app:icon="@drawable/event_available_24"
+                    app:iconGravity="textStart"
+                    app:iconPadding="12dp" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_open_notification_access"
-                        style="@style/Widget.Material3.Button.OutlinedButton"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="打开通知访问设置"
-                        app:icon="@drawable/notifications_active_24"
-                        app:iconGravity="textStart"
-                        app:iconPadding="12dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_open_notification_access"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="打开通知访问设置"
+                    app:icon="@drawable/notifications_active_24"
+                    app:iconGravity="textStart"
+                    app:iconPadding="12dp" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_select_apps"
-                        style="@style/Widget.Material3.Button"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="选择来源应用(多选)"
-                        app:icon="@drawable/apps_24"
-                        app:iconGravity="textStart"
-                        app:iconPadding="12dp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_select_apps"
+                    style="@style/Widget.Material3.Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="选择来源应用"
+                    app:icon="@drawable/apps_24"
+                    app:iconGravity="textStart"
+                    app:iconPadding="12dp" />
 
-                    <TextView
-                        android:id="@+id/text_selected_apps"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:paddingTop="8dp"
-                        android:text="未选择(默认全部)"
-                        android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
+                <TextView
+                    android:id="@+id/text_selected_apps"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="8dp"
+                    android:text="未选择(默认全部)"
+                    android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
 
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

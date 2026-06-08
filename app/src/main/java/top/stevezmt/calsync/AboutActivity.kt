@@ -66,36 +66,11 @@ class AboutActivity : AppCompatActivity() {
                             // fallback: ignore malformed keywords field
                         }
                     }
-                    if (json.has("relativeWords")) {
+                    if (json.has("fuzzyTimePairs")) {
                         try {
-                            val obj = json.get("relativeWords")
-                            val list = when (obj) {
-                                is JSONArray -> (0 until obj.length()).map { obj.getString(it) }
-                                is String -> {
-                                    val s = obj.trim().removePrefix("[").removeSuffix("]")
-                                    s.split(Regex("[,，;；\\n\\r]")).map { it.trim() }.filter { it.isNotEmpty() }
-                                }
-                                else -> emptyList()
-                            }
-                            if (list.isNotEmpty()) SettingsStore.setRelativeDateWords(this, list)
+                            SettingsStore.setFuzzyTimePairs(this, SettingsStore.parseFuzzyTimePairs(json.get("fuzzyTimePairs").toString()))
                         } catch (e: Exception) {
-                            // ignore malformed relativeWords
-                        }
-                    }
-                    if (json.has("customRules")) {
-                        try {
-                            val obj = json.get("customRules")
-                            val list = when (obj) {
-                                is JSONArray -> (0 until obj.length()).map { obj.getString(it) }
-                                is String -> {
-                                    val s = obj.trim().removePrefix("[").removeSuffix("]")
-                                    s.split(Regex("[,，;；\\n\\r]")).map { it.trim() }.filter { it.isNotEmpty() }
-                                }
-                                else -> emptyList()
-                            }
-                            if (list.isNotEmpty()) SettingsStore.setCustomRules(this, list)
-                        } catch (e: Exception) {
-                            // ignore malformed customRules
+                            // ignore malformed fuzzyTimePairs
                         }
                     }
                     if (json.has("preferFuture")) {
@@ -103,6 +78,15 @@ class AboutActivity : AppCompatActivity() {
                     }
                     if (json.has("keepAlive")) {
                         SettingsStore.setKeepAliveEnabled(this, json.getBoolean("keepAlive"))
+                    }
+                    if (json.has("notificationQueueMode")) {
+                        SettingsStore.setNotificationQueueMode(this, NotificationQueueMode.fromId(json.getInt("notificationQueueMode")))
+                    }
+                    if (json.has("notificationQueueTimeoutSeconds")) {
+                        SettingsStore.setNotificationQueueTimeoutSeconds(this, json.getInt("notificationQueueTimeoutSeconds"))
+                    }
+                    if (json.has("notificationQueueMaxMessages")) {
+                        SettingsStore.setNotificationQueueMaxMessages(this, json.getInt("notificationQueueMaxMessages"))
                     }
                     if (json.has("selectedCalendarId")) {
                         SettingsStore.setSelectedCalendar(this, json.getLong("selectedCalendarId"), json.optString("selectedCalendarName"))
@@ -148,10 +132,16 @@ class AboutActivity : AppCompatActivity() {
             try {
                 val json = JSONObject()
                 json.put("keywords", SettingsStore.getKeywords(this))
-                json.put("relativeWords", SettingsStore.getRelativeDateWords(this))
-                json.put("customRules", SettingsStore.getCustomRules(this))
+                val fuzzyPairs = JSONArray()
+                for (pair in SettingsStore.getFuzzyTimePairs(this)) {
+                    fuzzyPairs.put(JSONObject().put("word", pair.word).put("minutes", pair.minutesOfDay))
+                }
+                json.put("fuzzyTimePairs", fuzzyPairs)
                 json.put("preferFuture", SettingsStore.getPreferFutureOption(this))
                 json.put("keepAlive", SettingsStore.isKeepAliveEnabled(this))
+                json.put("notificationQueueMode", SettingsStore.getNotificationQueueMode(this).id)
+                json.put("notificationQueueTimeoutSeconds", SettingsStore.getNotificationQueueTimeoutSeconds(this))
+                json.put("notificationQueueMaxMessages", SettingsStore.getNotificationQueueMaxMessages(this))
                 val calendarId = SettingsStore.getSelectedCalendarId(this)
                 if (calendarId != null) {
                     json.put("selectedCalendarId", calendarId)

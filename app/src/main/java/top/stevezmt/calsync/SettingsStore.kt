@@ -20,6 +20,10 @@ object SettingsStore {
     private const val KEY_LAST_BACKUP_TS = "last_backup_ts"
     private const val KEY_LAST_BACKUP_NAME = "last_backup_name"
     private const val KEY_REMINDER_MINUTES = "reminder_minutes" // -1 for none, 0 for at time, >0 for minutes before
+    private const val KEY_NOTIFICATION_QUEUE_MODE = "notification_queue_mode"
+    private const val KEY_NOTIFICATION_QUEUE_TIMEOUT_SECONDS = "notification_queue_timeout_seconds"
+    private const val KEY_NOTIFICATION_QUEUE_MAX_MESSAGES = "notification_queue_max_messages"
+    private const val KEY_FUZZY_TIME_PAIRS = "fuzzy_time_pairs"
 
     // Parsing engines (extensible)
     private const val KEY_PARSING_ENGINE = "parsing_engine" // Int id, see ParseEngine
@@ -32,6 +36,8 @@ object SettingsStore {
     // Battery saver: lightweight guess before full parsing
     private const val KEY_GUESS_BEFORE_PARSE = "guess_before_parse"
     private const val KEY_PRIVACY_ACCEPTED = "privacy_accepted"
+
+    data class FuzzyTimePair(val word: String, val minutesOfDay: Int)
 
     fun isPrivacyAccepted(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -135,6 +141,164 @@ object SettingsStore {
     fun setReminderMinutes(context: Context, minutes: Int) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         prefs.edit { putInt(KEY_REMINDER_MINUTES, minutes) }
+    }
+
+    fun getNotificationQueueMode(context: Context): NotificationQueueMode {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return NotificationQueueMode.fromId(prefs.getInt(KEY_NOTIFICATION_QUEUE_MODE, NotificationQueueMode.OFF.id))
+    }
+
+    fun setNotificationQueueMode(context: Context, mode: NotificationQueueMode) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs.edit { putInt(KEY_NOTIFICATION_QUEUE_MODE, mode.id) }
+    }
+
+    fun getNotificationQueueTimeoutSeconds(context: Context): Int {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getInt(KEY_NOTIFICATION_QUEUE_TIMEOUT_SECONDS, 40).coerceIn(5, 300)
+    }
+
+    fun setNotificationQueueTimeoutSeconds(context: Context, seconds: Int) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs.edit { putInt(KEY_NOTIFICATION_QUEUE_TIMEOUT_SECONDS, seconds.coerceIn(5, 300)) }
+    }
+
+    fun getNotificationQueueMaxMessages(context: Context): Int {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getInt(KEY_NOTIFICATION_QUEUE_MAX_MESSAGES, 3).coerceIn(2, 10)
+    }
+
+    fun setNotificationQueueMaxMessages(context: Context, maxMessages: Int) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs.edit { putInt(KEY_NOTIFICATION_QUEUE_MAX_MESSAGES, maxMessages.coerceIn(2, 10)) }
+    }
+
+    fun getFuzzyTimePairs(context: Context): List<FuzzyTimePair> {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY_FUZZY_TIME_PAIRS, null) ?: return defaultFuzzyTimePairs()
+        return parseFuzzyTimePairs(raw).ifEmpty {
+            if (raw.trim() == "[]") emptyList() else defaultFuzzyTimePairs()
+        }
+    }
+
+    fun setFuzzyTimePairs(context: Context, pairs: List<FuzzyTimePair>) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val cleaned = cleanFuzzyTimePairs(pairs)
+        prefs.edit { putString(KEY_FUZZY_TIME_PAIRS, fuzzyTimePairsToString(cleaned)) }
+    }
+
+    fun resetFuzzyTimePairs(context: Context) {
+        setFuzzyTimePairs(context, defaultFuzzyTimePairs())
+    }
+
+    fun defaultFuzzyTimePairs(): List<FuzzyTimePair> = listOf(
+        FuzzyTimePair("早上", 8 * 60),
+        FuzzyTimePair("上午", 9 * 60),
+        FuzzyTimePair("午休后", 13 * 60),
+        FuzzyTimePair("下午", 13 * 60),
+        FuzzyTimePair("晚上", 19 * 60)
+    )
+
+    fun cleanFuzzyTimePairs(pairs: List<FuzzyTimePair>): List<FuzzyTimePair> {
+        val ordered = linkedMapOf<String, Int>()
+        for (pair in pairs) {
+            val word = pair.word.trim()
+            if (word.isBlank()) continue
+            if (pair.minutesOfDay !in 0..1439) continue
+            ordered[word] = pair.minutesOfDay
+        }
+        return ordered.map { (word, minutes) -> FuzzyTimePair(word, minutes) }
+    }
+
+    fun parseFuzzyTimePairs(value: Any?): List<FuzzyTimePair> {
+        return try {
+            val pairs = mutableListOf<FuzzyTimePair>()
+            when (value) {
+                is String -> {
+                    val trimmed = value.trim()
+                    if (trimmed.startsWith("[")) {
+                        Regex("\\{\\s*\"word\"\\s*:\\s*\"((?:\\\\.|[^\"])*)\"\\s*,\\s*\"minutes\"\\s*:\\s*(-?\\d+)\\s*}")
+                            .findAll(trimmed)
+                            .map { match ->
+                                FuzzyTimePair(unescapeJsonString(match.groupValues[1]), match.groupValues[2].toIntOrNull() ?: -1)
+                            }
+                            .forEach { pairs += it }
+                    } else {
+                        trimmed.split(',', '，', ';', '；', '\n', '\r')
+                            .mapNotNull { parseLooseFuzzyTimePair(it) }
+                            .forEach { pairs += it }
+                    }
+                }
+            }
+            cleanFuzzyTimePairs(pairs)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun parseLooseFuzzyTimePair(raw: String): FuzzyTimePair? {
+        val parts = raw.split("->", "=", ":", limit = 2).map { it.trim() }
+        if (parts.size != 2) return null
+        val minutes = parseTimeLabelToMinutes(parts[1]) ?: return null
+        return FuzzyTimePair(parts[0], minutes)
+    }
+
+    private fun fuzzyTimePairsToString(pairs: List<FuzzyTimePair>): String {
+        return cleanFuzzyTimePairs(pairs).joinToString(prefix = "[", postfix = "]") {
+            "{\"word\":\"${escapeJsonString(it.word)}\",\"minutes\":${it.minutesOfDay}}"
+        }
+    }
+
+    private fun escapeJsonString(value: String): String {
+        return buildString {
+            for (ch in value) {
+                when (ch) {
+                    '\\' -> append("\\\\")
+                    '"' -> append("\\\"")
+                    '\n' -> append("\\n")
+                    '\r' -> append("\\r")
+                    '\t' -> append("\\t")
+                    else -> append(ch)
+                }
+            }
+        }
+    }
+
+    private fun unescapeJsonString(value: String): String {
+        val out = StringBuilder()
+        var escaped = false
+        for (ch in value) {
+            if (escaped) {
+                out.append(
+                    when (ch) {
+                        'n' -> '\n'
+                        'r' -> '\r'
+                        't' -> '\t'
+                        else -> ch
+                    }
+                )
+                escaped = false
+            } else if (ch == '\\') {
+                escaped = true
+            } else {
+                out.append(ch)
+            }
+        }
+        if (escaped) out.append('\\')
+        return out.toString()
+    }
+
+    fun parseTimeLabelToMinutes(label: String): Int? {
+        val match = Regex("^(\\d{1,2})[:：](\\d{2})$").find(label.trim()) ?: return null
+        val hour = match.groupValues[1].toIntOrNull() ?: return null
+        val minute = match.groupValues[2].toIntOrNull() ?: return null
+        if (hour !in 0..23 || minute !in 0..59) return null
+        return hour * 60 + minute
+    }
+
+    fun formatMinutesOfDay(minutes: Int): String {
+        val safe = minutes.coerceIn(0, 1439)
+        return "%02d:%02d".format(safe / 60, safe % 60)
     }
 
     fun isGuessBeforeParseEnabled(context: Context): Boolean {

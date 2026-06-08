@@ -3,14 +3,15 @@ package top.stevezmt.calsync
 import android.content.Context
 import androidx.core.content.edit
 
-object NotificationCache {
+object ResultLogCache {
     private val deque = ArrayDeque<String>()
-    private const val LIMIT = 20
+    private const val LIMIT = 50
     private const val ENTRY_MAX_CHARS = 1200
-    private const val PREFS = "calsync_log_cache"
-    private const val KEY_LOGS = "recent_logs"
+    private const val PREFS = "calsync_result_log_cache"
+    private const val KEY_LOGS = "recent_results"
     private var loaded = false
 
+    // Lazily loads user-facing parse/calendar results without mixing notification capture diagnostics.
     private fun ensureLoaded(context: Context) {
         if (loaded) return
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -18,15 +19,18 @@ object NotificationCache {
         if (!raw.isNullOrBlank()) {
             try {
                 for (item in decode(raw)) {
-                    if (item.isNotBlank()) deque.addLast(item)
+                    if (isUserFacingResult(item)) deque.addLast(item)
                 }
                 while (deque.size > LIMIT) deque.removeFirst()
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
         }
         loaded = true
     }
 
+    // Stores newest-first entries so the main screen can restore recent meaningful outcomes.
     fun add(context: Context, entry: String) {
+        if (!isUserFacingResult(entry)) return
         ensureLoaded(context)
         val safeEntry = if (entry.length > ENTRY_MAX_CHARS) entry.take(ENTRY_MAX_CHARS) + "..." else entry
         synchronized(deque) {
@@ -46,6 +50,17 @@ object NotificationCache {
         prefs.edit { putString(KEY_LOGS, encode(deque)) }
     }
 
+    private fun isUserFacingResult(entry: String): Boolean {
+        val text = entry.trim()
+        if (text.isBlank()) return false
+        if (text.startsWith("未保存日程")) return false
+        if (text.startsWith("未处理")) return false
+        if (text.contains("未匹配关键字")) return false
+        if (text.contains("未包含时间句子")) return false
+        return true
+    }
+
+    // Minimal JSON-string-array reader keeps this cache usable in local JVM tests without Android org.json.
     private fun decode(raw: String): List<String> {
         val text = raw.trim()
         if (text.isEmpty() || text.first() != '[' || text.last() != ']') return emptyList()
@@ -77,6 +92,7 @@ object NotificationCache {
         return if (inString || escaping) emptyList() else out
     }
 
+    // Writes the same compact array shape as the old JSONArray-based caches for easy migration.
     private fun encode(entries: Iterable<String>): String = buildString {
         append('[')
         entries.forEachIndexed { index, entry ->

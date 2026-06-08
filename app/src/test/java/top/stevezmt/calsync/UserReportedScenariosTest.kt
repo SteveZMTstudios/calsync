@@ -1,6 +1,7 @@
 package top.stevezmt.calsync
 
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 import java.util.*
 
@@ -24,8 +25,16 @@ class UserReportedScenariosTest {
         return DateTimeParser.parseDateTime(UserReportedScenariosTest.DummyContext, text, baseCal.timeInMillis)
     }
 
+    @Before
+    fun resetSettings() {
+        DummyContext.clearPrefs()
+    }
+
     object DummyContext: android.content.ContextWrapper(null) {
         private val mem = mutableMapOf<String, Any>()
+        fun clearPrefs() {
+            mem.clear()
+        }
         override fun getSharedPreferences(name: String?, mode: Int): android.content.SharedPreferences {
             return object: android.content.SharedPreferences {
                 override fun getAll(): MutableMap<String, *> = mem
@@ -94,5 +103,41 @@ class UserReportedScenariosTest {
         assertEquals(27, e.get(Calendar.DAY_OF_MONTH))
         assertEquals(23, e.get(Calendar.HOUR_OF_DAY))
         assertEquals(59, e.get(Calendar.MINUTE))
+    }
+
+    @Test
+    fun testCase4_bareWeekdayChineseHalfHourWithLocation() {
+        val text = "@全体成员 周三下午两点半参加宣讲会 ，地点在35B4"
+        val r = parse(text)
+        assertNotNull(r)
+        val rr = r!!
+        val c = Calendar.getInstance().apply { timeInMillis = rr.startMillis }
+        assertEquals(2025, c.get(Calendar.YEAR))
+        assertEquals(Calendar.OCTOBER, c.get(Calendar.MONTH))
+        assertEquals(22, c.get(Calendar.DAY_OF_MONTH))
+        assertEquals(14, c.get(Calendar.HOUR_OF_DAY))
+        assertEquals(30, c.get(Calendar.MINUTE))
+        assertEquals("35B4", rr.location)
+    }
+
+    @Test
+    fun testCase5_mlKitFallsBackForExplicitWeekdayChineseTime() {
+        SettingsStore.setParsingEngine(DummyContext, ParseEngine.ML_KIT)
+        val result = DateTimeParser.parseDateTimeWithEngine(
+            DummyContext,
+            "@全体成员 周四下午四点参加宣讲会 ，地点在35B4",
+            baseCal.timeInMillis
+        )
+
+        assertNotNull(result)
+        assertEquals(ParseEngine.ML_KIT, result!!.requestedEngine)
+        assertEquals(ParseEngine.BUILTIN.displayName, result.actualEngineName)
+        val c = Calendar.getInstance().apply { timeInMillis = result.result.startMillis }
+        assertEquals(2025, c.get(Calendar.YEAR))
+        assertEquals(Calendar.OCTOBER, c.get(Calendar.MONTH))
+        assertEquals(23, c.get(Calendar.DAY_OF_MONTH))
+        assertEquals(16, c.get(Calendar.HOUR_OF_DAY))
+        assertEquals(0, c.get(Calendar.MINUTE))
+        assertEquals("35B4", result.result.location)
     }
 }

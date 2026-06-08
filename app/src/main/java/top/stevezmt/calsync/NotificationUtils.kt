@@ -25,10 +25,13 @@ object NotificationUtils {
 	const val EXTRA_EVENT_ID = "extra_event_id"
 	const val EXTRA_EVENT_TITLE = "extra_event_title"
 	const val EXTRA_EVENT_START = "extra_event_start"
+	const val EXTRA_EVENT_END = "extra_event_end"
+	const val EXTRA_EVENT_LOCATION = "extra_event_location"
+	const val EXTRA_EVENT_ENGINE = "extra_event_engine"
 	// baseMillis used by parser when creating this event (System.currentTimeMillis captured at processing start)
 	const val EXTRA_EVENT_BASE = "extra_event_base"
 
-	// Debug log broadcast (for MainActivity UI)
+	// Debug diagnostics stay separate from MainActivity's user-facing result log.
 	const val ACTION_DEBUG_LOG = "top.stevezmt.calsync.ACTION_DEBUG_LOG"
 	const val EXTRA_DEBUG_LINE = "extra_debug_line"
 

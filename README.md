@@ -29,7 +29,7 @@
 
 <!-- <video src="https://sharepoint.cf.stevezmt.top/cdn/assets/self/calsync-intro.mp4" style="max-width:100%;height:auto" controls autoplay>
   您的浏览器不支持 video 标签。</video> -->
-<video src="https://sharepoint.cf.stevezmt.top/cdn/assets/self/calsync-intro.mp4" controls="controls" width="500" height="300"></video>
+<video src="https://github.com/user-attachments/assets/e7682baf-aeac-4a9c-85aa-f5b7e7145c62" controls="controls" width="500" height="300"></video>
 
 
 查看此应用的 [隐私政策](POLICY.md) 。

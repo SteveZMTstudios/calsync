@@ -26,64 +26,56 @@
         android:padding="16dp"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-        <com.google.android.material.card.MaterialCardView
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="0dp"
-            app:strokeColor="@color/md_theme_outline"
-            app:strokeWidth="1dp">
+            android:orientation="vertical"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp">
 
-            <LinearLayout
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="选择要监听的通知来源应用"
+                android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:alpha="0.8"
+                android:paddingTop="4dp"
+                android:text="未选择时默认监听全部来源；选择后只处理这些应用的通知。"
+                android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
+
+            <ListView
+                android:id="@+id/list_apps"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical"
-                android:padding="16dp">
+                android:layout_height="0dp"
+                android:layout_marginTop="8dp"
+                android:layout_weight="1"
+                android:choiceMode="multipleChoice"
+                android:listSelector="?attr/colorPrimaryContainer" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="选择要监听的通知来源应用"
-                    android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
+            <CheckBox
+                android:id="@+id/cb_show_all"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="包含系统/无图标应用" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingTop="4dp"
-                    android:text="支持多选"
-                    android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-                    android:alpha="0.8" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_save_selection"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="保存"
+                app:icon="@drawable/save_24"
+                app:iconGravity="textStart"
+                app:iconPadding="12dp" />
 
-                <ListView
-                    android:id="@+id/list_apps"
-                    android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="1"
-                    android:layout_marginTop="8dp"
-                    android:choiceMode="multipleChoice"
-                    android:listSelector="?attr/colorPrimaryContainer" />
-
-                <CheckBox
-                    android:id="@+id/cb_show_all"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="包含系统/无图标应用" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_save_selection"
-                    style="@style/Widget.Material3.Button"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="保存"
-                    app:icon="@drawable/save_24"
-                    app:iconGravity="textStart"
-                    app:iconPadding="12dp" />
-
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
 
     </LinearLayout>
 

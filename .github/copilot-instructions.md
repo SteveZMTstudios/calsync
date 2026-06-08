@@ -50,13 +50,23 @@ Concise guide for AI agents: focus on the notification → parse → calendar fl
 - `third_party/llama.cpp` (native module)
   - Location: `third_party/llama.cpp/` — this is a full native C/C++ project with its own CI and `.github/copilot-instructions.md` (read that file before changing native code).
   - Android integration: `app/src/main/cpp/CMakeLists.txt` adds llama.cpp as a subdirectory and builds a `llama_jni` shared library; NDK version is pinned in `app/build.gradle.kts` (`ndkVersion = "29.0.13599879"`).
+  - Version pin: the submodule is intentionally fixed to llama.cpp release `b9553` (`9e3b928fd8c9d14dbf15a8768b9fdd7e5c721d66`). Do not track upstream `master`; update only by deliberately changing the recorded gitlink.
+  - Reproducible Builds (Critical for F-Droid/Izzy):
+    - Path Mapping: `CMakeLists.txt` uses `-ffile-prefix-map` to map `${PROJECT_ROOT}`, `${LLAMA_DIR}`, and `${CMAKE_BINARY_DIR}` to `.` to strip absolute paths.
+    - Versioning: `GIT_EXECUTABLE` is forced to `false` in CMake, with `BUILD_COMMIT="reproducible"` and `BUILD_NUMBER="0"` to prevent environment-dependent binary diffs.
+    - Linker: `LINKER:--build-id=none` is used to remove non-deterministic build IDs.
   - Build notes: changes to `llama.cpp` may require CMake/NDK updates and are often platform-specific; prefer minimal, well-tested changes. Use CPU-only defaults for Android builds; Vulkan/CUDA/Metal require extra toolchains and hardware.
   - Testing & agent guidance:
     - Run native builds with CMake and the Android NDK; ensure `LLAMA_DIR` exists (CMake will fail otherwise).
     - For changes inside `third_party/llama.cpp`, follow its contribution guide and run its CI locally (`ci/run.sh`) or the specific CMake build commands documented in its `.github` docs.
     - Avoid modifying vendored code unless necessary — prefer JNI glue (`app/src/main/cpp/llama_jni.cpp`) for app-specific logic.
 
-
+## Reproducible Builds & CI
+- **Consistency**: `app/build.gradle.kts` forces `BuildConfig.VERSION_CODE` to the base version code to ensure `AndroidManifest.xml` remains identical across ABI splits.
+- **CI Strategy**: Use the Matrix Strategy in `.github/workflows/android-build-release-matrix.yml` for parallel ABI builds. This prevents manifest interference and speeds up the pipeline.
+- **Submodules**: CI must use `git submodule update --init` so builds consume the main repository's recorded llama.cpp commit instead of a shallow/latest upstream checkout.
+- **Flavors**: FOSS flavor does NOT generate a universal APK (`isUniversalApk = false`).
+- **Architecture**: `riscv64` is supported, but `GGML_RVV` must be disabled in `CMakeLists.txt` to avoid toolchain assembly issues.
 
 ## Quick examples
 - Extract: `DateTimeParser.extractAllSentencesContainingDate(ctx, title + "。" + content)`

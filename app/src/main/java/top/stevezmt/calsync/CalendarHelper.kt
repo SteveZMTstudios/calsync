@@ -14,25 +14,21 @@ object CalendarHelper {
         try {
             val cr = context.contentResolver
             val selected = SettingsStore.getSelectedCalendarId(context)
-            val calendarId = selected ?: getPrimaryCalendarId(cr)
+            val calendarId = chooseCalendarId(selected, getPrimaryCalendarId(cr))
             if (calendarId == null) {
                 Log.w(TAG, "No writable calendar found")
                 return null
             }
-
-            val values = ContentValues().apply {
-                put(CalendarContract.Events.DTSTART, startMillis)
-                put(CalendarContract.Events.DTEND, endMillis ?: (startMillis + 60 * 60 * 1000L))
-                put(CalendarContract.Events.TITLE, title)
-                put(CalendarContract.Events.DESCRIPTION, description)
-                put(CalendarContract.Events.CALENDAR_ID, calendarId)
-                if (!location.isNullOrBlank()) put(CalendarContract.Events.EVENT_LOCATION, location)
-                put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
-                // Set HAS_ALARM to 1 if we have a reminder configured
-                if (SettingsStore.getReminderMinutes(context) >= 0) {
-                    put(CalendarContract.Events.HAS_ALARM, 1)
-                }
-            }
+            val reminderMinutes = SettingsStore.getReminderMinutes(context)
+            val values = buildEventValues(
+                title = title,
+                description = description,
+                startMillis = startMillis,
+                endMillis = endMillis,
+                calendarId = calendarId,
+                location = location,
+                reminderMinutes = reminderMinutes
+            )
             val uri: Uri? = cr.insert(CalendarContract.Events.CONTENT_URI, values)
             if (uri != null) {
                 Log.i(TAG, "Inserted event: $uri")
@@ -43,14 +39,9 @@ object CalendarHelper {
                 }
 
                 if (eventId != null) {
-                    val reminderMinutes = SettingsStore.getReminderMinutes(context)
                     if (reminderMinutes >= 0) {
                         try {
-                            val reminderValues = ContentValues().apply {
-                                put(CalendarContract.Reminders.EVENT_ID, eventId)
-                                put(CalendarContract.Reminders.MINUTES, reminderMinutes)
-                                put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
-                            }
+                            val reminderValues = buildReminderValues(eventId, reminderMinutes)
                             cr.insert(CalendarContract.Reminders.CONTENT_URI, reminderValues)
                             Log.i(TAG, "Added reminder: $reminderMinutes minutes before")
                         } catch (e: Exception) {
@@ -72,8 +63,47 @@ object CalendarHelper {
         return null
     }
 
-    data class CalendarInfo(val id: Long, val name: String)
+    internal fun chooseCalendarId(selected: Long?, primary: Long?): Long? = selected ?: primary
 
+    // Builds event fields in one place so calendar insertion behavior stays testable without Android providers.
+    internal fun buildEventValues(
+        title: String,
+        description: String,
+        startMillis: Long,
+        endMillis: Long?,
+        calendarId: Long,
+        location: String?,
+        reminderMinutes: Int
+    ): ContentValues {
+        return ContentValues().apply {
+            put(CalendarContract.Events.DTSTART, startMillis)
+            put(CalendarContract.Events.DTEND, endMillis ?: (startMillis + 60 * 60 * 1000L))
+            put(CalendarContract.Events.TITLE, title)
+            put(CalendarContract.Events.DESCRIPTION, description)
+            put(CalendarContract.Events.CALENDAR_ID, calendarId)
+            if (!location.isNullOrBlank()) put(CalendarContract.Events.EVENT_LOCATION, location)
+            put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+            if (reminderMinutes >= 0) {
+                put(CalendarContract.Events.HAS_ALARM, 1)
+            }
+        }
+    }
+
+    // Reminder insertion is separate from event insertion because some calendars reject reminder rows.
+    internal fun buildReminderValues(eventId: Long, reminderMinutes: Int): ContentValues {
+        return ContentValues().apply {
+            put(CalendarContract.Reminders.EVENT_ID, eventId)
+            put(CalendarContract.Reminders.MINUTES, reminderMinutes)
+            put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
+        }
+    }
+
+    data class CalendarInfo(val id: Long, val name: String, val accountEmail: String? = null) {
+        val displayLabel: String
+            get() = if (accountEmail.isNullOrBlank()) name else "$name\n$accountEmail"
+    }
+
+    // Lists visible calendars and carries account email separately so UI labels don't pollute saved names.
     fun listWritableCalendars(context: Context): List<CalendarInfo> {
         val cr = context.contentResolver
         val result = mutableListOf<CalendarInfo>()
@@ -90,14 +120,24 @@ object CalendarHelper {
             cursor?.use { c ->
                 while (c.moveToNext()) {
                     val id = c.getLong(0)
-                    val display = c.getString(1) ?: c.getString(2) ?: c.getString(3) ?: "(未命名)"
-                    result.add(CalendarInfo(id, display))
+                    val accountName = c.getString(2)
+                    val ownerAccount = c.getString(3)
+                    val display = c.getString(1) ?: accountName ?: ownerAccount ?: "(未命名)"
+                    val email = extractEmail(accountName) ?: extractEmail(ownerAccount)
+                    result.add(CalendarInfo(id, display, email))
                 }
             }
         } catch (e: SecurityException) {
             Log.e(TAG, "No permission to read calendars", e)
         }
         return result
+    }
+
+    internal fun extractEmail(value: String?): String? {
+        val text = value?.trim().orEmpty()
+        if (text.isEmpty()) return null
+        val match = Regex("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}").find(text)
+        return match?.value
     }
 
     private fun getPrimaryCalendarId(cr: android.content.ContentResolver): Long? {

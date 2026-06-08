@@ -46,16 +46,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var navView: NavigationView
 
-    private val debugLogReceiver = object: android.content.BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            try {
-                if (intent?.action != NotificationUtils.ACTION_DEBUG_LOG) return
-                val line = intent.getStringExtra(NotificationUtils.EXTRA_DEBUG_LINE) ?: return
-                appendResult(line)
-            } catch (_: Throwable) {}
-        }
-    }
-
     private val requestCalendarPermission = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { map ->
@@ -88,11 +78,10 @@ class MainActivity : AppCompatActivity() {
                     val id = intent.getLongExtra(NotificationUtils.EXTRA_EVENT_ID, -1L)
                     val title = intent.getStringExtra(NotificationUtils.EXTRA_EVENT_TITLE) ?: ""
                     val start = intent.getLongExtra(NotificationUtils.EXTRA_EVENT_START, 0L)
-                    val base = intent.getLongExtra(NotificationUtils.EXTRA_EVENT_BASE, -1L)
-                    appendResult("事件创建: id=$id title=$title start=${java.text.SimpleDateFormat("M月d日 H:mm", java.util.Locale.getDefault()).format(java.util.Date(start))}")
-                    if (base > 0 && BuildConfig.DEBUG) {
-                        appendResult("解析时的 now (DateTimeParser base): ${DateTimeParser.getNowFormatted()}  (wall clock now); parser baseMillis=$base")
-                    }
+                    val end = intent.getLongExtra(NotificationUtils.EXTRA_EVENT_END, start + 60 * 60 * 1000L)
+                    val location = intent.getStringExtra(NotificationUtils.EXTRA_EVENT_LOCATION)
+                    val engine = intent.getStringExtra(NotificationUtils.EXTRA_EVENT_ENGINE) ?: "未知"
+                    appendResult(formatSavedResult(id, title, start, end, location, engine))
                 }
             } catch (_: Throwable) {}
         }
@@ -200,18 +189,11 @@ class MainActivity : AppCompatActivity() {
             onPrivacyAccepted(fromDialog = false)
         }
 
-        // Print DateTimeParser current now/time when opening main UI
-        if (BuildConfig.DEBUG) {
-            try {
-                appendResult("DateTimeParser now: ${DateTimeParser.getNowFormatted()}")
-            } catch (_: Throwable) {}
-        }
-
-        // Load recent logs captured in background (avoid blocking UI thread)
+        // Restore user-facing parse/calendar outcomes; notification capture diagnostics stay separate.
         try {
-            kotlin.concurrent.thread(name = "calsync-load-logs") {
+            kotlin.concurrent.thread(name = "calsync-load-results") {
                 try {
-                    val cached = NotificationCache.snapshot(applicationContext)
+                    val cached = ResultLogCache.snapshot(applicationContext)
                     // snapshot is newest-first; print oldest-first for readable chronology
                     cached.asReversed().forEach { appendResult(it) }
                 } catch (_: Throwable) {}
@@ -289,23 +271,11 @@ class MainActivity : AppCompatActivity() {
             )
         } catch (_: Throwable) {}
 
-        try {
-            val f2 = android.content.IntentFilter(NotificationUtils.ACTION_DEBUG_LOG)
-            androidx.core.content.ContextCompat.registerReceiver(
-                this,
-                debugLogReceiver,
-                f2,
-                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
-            )
-        } catch (_: Throwable) {}
     }
 
     override fun onStop() {
         try {
             unregisterReceiver(eventCreatedReceiver)
-        } catch (_: Throwable) {}
-        try {
-            unregisterReceiver(debugLogReceiver)
         } catch (_: Throwable) {}
         super.onStop()
     }
@@ -375,7 +345,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "未找到可写日历或无权限", Toast.LENGTH_SHORT).show()
             return
         }
-        val names = list.map { it.name }.toTypedArray()
+        val names = list.map { it.displayLabel }.toTypedArray()
         AlertDialog.Builder(this)
             .setTitle("选择日历")
             .setItems(names) { d, which ->
@@ -433,16 +403,22 @@ class MainActivity : AppCompatActivity() {
                     ctx,
                     NotificationProcessor.ProcessInput("test.pkg", t, c, isTest = true),
                     object: NotificationProcessor.ConfirmationNotifier{
-                        override fun onEventCreated(eventId: Long, title: String, startMillis: Long, endMillis: Long, location: String?) {
-                            appendResult("成功: 事件ID=$eventId 标题=$title 开始=${java.text.SimpleDateFormat("M月d日 H:mm", java.util.Locale.getDefault()).format(java.util.Date(startMillis))}")
+                        override fun onCandidateEvent(title: String, startMillis: Long, endMillis: Long?, location: String?, sourceSentence: String, engineLabel: String) {
+                            appendResult(formatCandidateResult(title, startMillis, endMillis, location, engineLabel))
+                        }
+
+                        override fun onEventCreated(eventId: Long, title: String, startMillis: Long, endMillis: Long, location: String?, engineLabel: String) {
+                            appendResult(formatSavedResult(eventId, title, startMillis, endMillis, location, engineLabel))
                         }
                         override fun onError(message: String?) { appendResult("错误: $message") }
-                        override fun onDebugLog(line: String) {
-                            if (BuildConfig.DEBUG) appendResult("[debug] $line")
-                        }
                     }
                 )
-                if (!res.handled) appendResult("未处理: ${res.reason}")
+                if (!res.handled) {
+                    NotificationCache.add(
+                        ctx,
+                        "测试解析未处理: ${res.reason ?: "unknown"}\n标题: ${t.ifBlank { "(空)" }}\n正文:\n${c.ifBlank { "(空)" }}"
+                    )
+                }
             } catch (t2: Throwable) {
                 appendResult("错误: ${t2.message}")
             } finally {
@@ -451,6 +427,21 @@ class MainActivity : AppCompatActivity() {
                 } catch (_: Throwable) {}
             }
         }
+    }
+
+    // Keeps manual test output aligned with the background notification result history.
+    private fun formatCandidateResult(title: String, startMillis: Long, endMillis: Long?, location: String?, engineLabel: String): String {
+        val fmt = java.text.SimpleDateFormat("M月d日 H:mm", java.util.Locale.getDefault())
+        val endText = endMillis?.let { " - ${fmt.format(java.util.Date(it))}" } ?: ""
+        val locationText = if (!location.isNullOrBlank()) "\n地点: $location" else ""
+        return "发现可能日程: $title\n引擎: $engineLabel\n时间: ${fmt.format(java.util.Date(startMillis))}$endText$locationText"
+    }
+
+    // Mirrors ResultLogCache's saved-event wording so live and restored main-page logs read the same.
+    private fun formatSavedResult(eventId: Long, title: String, startMillis: Long, endMillis: Long, location: String?, engineLabel: String): String {
+        val fmt = java.text.SimpleDateFormat("M月d日 H:mm", java.util.Locale.getDefault())
+        val locationText = if (!location.isNullOrBlank()) "\n地点: $location" else ""
+        return "已保存日历: $title\n事件ID: $eventId\n引擎: $engineLabel\n时间: ${fmt.format(java.util.Date(startMillis))} - ${fmt.format(java.util.Date(endMillis))}$locationText"
     }
 
     private fun appendResult(line: String) {

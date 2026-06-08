@@ -85,9 +85,11 @@ class ParsingEnginesAndBatterySaverTest {
         SettingsStore.setCustomRules(DummyContext, emptyList())
 
         val likely = "明天上午9点开会"
+        val fuzzyLikely = "周三下午参加宣讲会"
         val unlikely = "通知，下午104的课挪至207进行，请留意开关机房"
 
         assertTrue(DateTimeParser.guessContainsDateTime(DummyContext, likely))
+        assertTrue(DateTimeParser.guessContainsDateTime(DummyContext, fuzzyLikely))
         assertFalse(DateTimeParser.guessContainsDateTime(DummyContext, unlikely))
     }
 
@@ -106,5 +108,21 @@ class ParsingEnginesAndBatterySaverTest {
         assertNotNull(rr.endMillis)
         val dur = rr.endMillis!! - rr.startMillis
         assertTrue("duration should be >= 2h for '3点到5点', actual=${dur/60000}min", dur >= 2 * 60 * 60 * 1000L)
+    }
+
+    @Test
+    fun parseDateTimeWithEngineReportsActualFallbackEngine() {
+        SettingsStore.setParsingEngine(DummyContext, ParseEngine.ML_KIT)
+
+        val result = DateTimeParser.parseDateTimeWithEngine(
+            DummyContext,
+            "明天上午9点开会",
+            baseCal.timeInMillis
+        )
+
+        assertNotNull(result)
+        assertEquals(ParseEngine.ML_KIT, result!!.requestedEngine)
+        assertEquals(ParseEngine.BUILTIN.displayName, result.actualEngineName)
+        assertEquals("ML Kit -> 内置引擎", result.engineLabel)
     }
 }

@@ -10,13 +10,25 @@ object NotificationProcessor {
 		val packageName: String,
 		val title: String,
 		val content: String,
-		val isTest: Boolean = false
+		val isTest: Boolean = false,
+		val baseMillisOverride: Long? = null
 	)
+
+	enum class Outcome {
+		CREATED,
+		FILTERED,
+		PREFILTER_REJECTED,
+		NO_TIME_SENTENCE,
+		PARSE_FAILED,
+		INSERT_FAILED,
+		ERROR
+	}
 
 	data class ProcessResult(
 		val handled: Boolean,
 		val eventId: Long? = null,
-		val reason: String? = null
+		val reason: String? = null,
+		val outcome: Outcome = if (handled) Outcome.CREATED else Outcome.ERROR
 	)
 
 	/**
@@ -32,28 +44,36 @@ object NotificationProcessor {
 	fun process(context: Context, input: ProcessInput, notifier: ConfirmationNotifier): ProcessResult {
 		return try {
 			// Capture a single 'now' for this processing run to ensure consistent relative parsing
-			val baseMillis = System.currentTimeMillis()
+			val baseMillis = input.baseMillisOverride ?: System.currentTimeMillis()
 			val engine = SettingsStore.getParsingEngine(context)
 			notifier.onDebugLog("process start pkg=${input.packageName} isTest=${input.isTest} baseMillis=$baseMillis engine=${engine.id}")
-			val fullText = input.title + "。" + input.content
+			if (!input.isTest && input.packageName == context.packageName) {
+				return ProcessResult(false, reason = "忽略自身通知", outcome = Outcome.FILTERED)
+			}
+			val originalFullText = input.title + "。" + input.content
+			val fuzzyInjection = FuzzyTimeInjector.inject(context, originalFullText)
+			val fullText = fuzzyInjection?.text ?: originalFullText
 			val keywords = SettingsStore.getKeywords(context)
 			val matchesKeyword = keywords.any { kw ->
 				input.title.contains(kw, true) || input.content.contains(kw, true)
 			}
-			if (!matchesKeyword) return ProcessResult(false, reason = "未匹配关键字")
+			if (!matchesKeyword && fuzzyInjection == null) {
+				return ProcessResult(false, reason = "未匹配关键字", outcome = Outcome.FILTERED)
+			}
 
 			val selectedPkgs = SettingsStore.getSelectedSourceAppPkgs(context)
 			if (selectedPkgs.isNotEmpty() && input.packageName !in selectedPkgs && !input.isTest) {
-				return ProcessResult(false, reason = "包名未在选择列表")
+				return ProcessResult(false, reason = "包名未在选择列表", outcome = Outcome.FILTERED)
 			}
 
-			// Battery saver: do a lightweight guess before full parsing
-			if (SettingsStore.isGuessBeforeParseEnabled(context)) {
-				if (!DateTimeParser.guessContainsDateTime(context, fullText)) {
-					notifier.onDebugLog("prefilter=false (skip)")
-					return ProcessResult(false, reason = "预筛选：不像日程")
-				}
-				notifier.onDebugLog("prefilter=true")
+			if (fuzzyInjection != null) {
+				notifier.onInfoLog(fuzzyInjection.logMessage)
+				notifier.onDebugLog(fuzzyInjection.logMessage)
+			}
+
+			if (engine == ParseEngine.AI_GGUF && !DateTimeParser.guessContainsDateTime(context, fullText)) {
+				notifier.onDebugLog("prefilter=false (skip)")
+				return ProcessResult(false, reason = "预筛选：不像日程", outcome = Outcome.PREFILTER_REJECTED)
 			}
 
 			val sentences = if (engine == ParseEngine.AI_GGUF) {
@@ -61,7 +81,13 @@ object NotificationProcessor {
 			} else {
 				DateTimeParser.extractAllSentencesContainingDate(context, fullText)
 			}
-			if (sentences.isEmpty()) return ProcessResult(false, reason = if (engine == ParseEngine.AI_GGUF) "AI 模式下全文为空" else "未包含时间句子")
+			if (sentences.isEmpty()) {
+				return ProcessResult(
+					false,
+					reason = if (engine == ParseEngine.AI_GGUF) "AI 模式下全文为空" else "未包含时间句子",
+					outcome = Outcome.NO_TIME_SENTENCE
+				)
+			}
 			notifier.onDebugLog("sentences=${sentences.size}")
 			val (globalTitle, globalLocation) = DateTimeParser.extractTitleAndLocationFromText(context, fullText)
 
@@ -71,8 +97,9 @@ object NotificationProcessor {
 			for (sentence in sentences) {
 				try {
 					notifier.onDebugLog("sentence='${sentence.take(120)}'")
-					val parsed = DateTimeParser.parseDateTime(context, sentence, baseMillis)
-					if (parsed == null) { lastReason = "解析失败($sentence)"; continue }
+					val engineParsed = DateTimeParser.parseDateTimeWithEngine(context, sentence, baseMillis)
+					if (engineParsed == null) { lastReason = "解析失败($sentence)"; continue }
+					val parsed = engineParsed.result
 					notifier.onDebugLog("parsed start=${parsed.startMillis} end=${parsed.endMillis} title=${parsed.title} loc=${parsed.location}")
 
 					val chosenLocation = parsed.location ?: globalLocation
@@ -85,11 +112,12 @@ object NotificationProcessor {
 					val eventTitle = preferredTitle ?: parsedTitle ?: fallbackTitle
 					var desc = "来源: ${if (input.isTest) "测试" else input.packageName}\n原文:\n${input.title}\n${input.content}"
 					if (!chosenLocation.isNullOrBlank()) desc += "\n地点: ${chosenLocation}"
+					notifier.onCandidateEvent(eventTitle, parsed.startMillis, parsed.endMillis, chosenLocation, sentence, engineParsed.engineLabel)
 
 					val eventId = CalendarHelper.insertEvent(context, eventTitle, desc, parsed.startMillis, parsed.endMillis, chosenLocation)
 					if (eventId != null) {
 						NotificationUtils.sendEventCreated(context, eventId, parsed.startMillis, eventTitle, chosenLocation)
-						notifier.onEventCreated(eventId, eventTitle, parsed.startMillis, parsed.endMillis ?: (parsed.startMillis + 60*60*1000L), chosenLocation)
+						notifier.onEventCreated(eventId, eventTitle, parsed.startMillis, parsed.endMillis ?: (parsed.startMillis + 60*60*1000L), chosenLocation, engineParsed.engineLabel)
 						// also broadcast baseMillis so UI can display what 'now' was when parsing
 						try {
 							val b = android.content.Intent(NotificationUtils.ACTION_EVENT_CREATED)
@@ -97,6 +125,11 @@ object NotificationProcessor {
 							b.putExtra(NotificationUtils.EXTRA_EVENT_ID, eventId)
 							b.putExtra(NotificationUtils.EXTRA_EVENT_TITLE, eventTitle)
 							b.putExtra(NotificationUtils.EXTRA_EVENT_START, parsed.startMillis)
+							b.putExtra(NotificationUtils.EXTRA_EVENT_END, parsed.endMillis ?: (parsed.startMillis + 60*60*1000L))
+							b.putExtra(NotificationUtils.EXTRA_EVENT_ENGINE, engineParsed.engineLabel)
+							if (!chosenLocation.isNullOrBlank()) {
+								b.putExtra(NotificationUtils.EXTRA_EVENT_LOCATION, chosenLocation)
+							}
 							b.putExtra(NotificationUtils.EXTRA_EVENT_BASE, baseMillis)
 							context.sendBroadcast(b)
 						} catch (_: Throwable) {}
@@ -112,19 +145,35 @@ object NotificationProcessor {
 					notifier.onDebugLog("exception=${t::class.java.simpleName}:${t.message}")
 				}
 			}
-			return if (anyCreated) ProcessResult(true, eventId = lastEventId) else ProcessResult(false, reason = lastReason)
+			return if (anyCreated) {
+				ProcessResult(true, eventId = lastEventId, outcome = Outcome.CREATED)
+			} else {
+				val outcome = when {
+					lastReason?.startsWith("插入日历失败") == true -> Outcome.INSERT_FAILED
+					lastReason?.startsWith("异常") == true -> Outcome.ERROR
+					else -> Outcome.PARSE_FAILED
+				}
+				ProcessResult(false, reason = lastReason, outcome = outcome)
+			}
 		} catch (t: Throwable) {
 			Log.e(TAG, "process failed", t)
 			try { NotificationUtils.sendError(context, Exception(t)) } catch (_: Throwable) {}
 			notifier.onError("处理异常: ${t.message}")
-			ProcessResult(false, reason = t.message)
+			ProcessResult(false, reason = t.message, outcome = Outcome.ERROR)
 		}
 	}
 
 	interface ConfirmationNotifier {
-		fun onEventCreated(eventId: Long, title: String, startMillis: Long, endMillis: Long, location: String?)
+		// Called after parsing succeeds but before calendar insertion, for user-facing result history.
+		fun onCandidateEvent(title: String, startMillis: Long, endMillis: Long?, location: String?, sourceSentence: String, engineLabel: String) {
+			// default no-op
+		}
+		fun onEventCreated(eventId: Long, title: String, startMillis: Long, endMillis: Long, location: String?, engineLabel: String)
 		fun onError(message: String?)
 		fun onDebugLog(line: String) {
+			// default no-op
+		}
+		fun onInfoLog(line: String) {
 			// default no-op
 		}
 	}

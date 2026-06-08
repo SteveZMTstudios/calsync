@@ -16,6 +16,7 @@ import com.google.android.material.appbar.MaterialToolbar
 
 class NotificationStatusActivity : AppCompatActivity() {
     private lateinit var statusView: TextView
+    private lateinit var captureView: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,6 +28,8 @@ class NotificationStatusActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         statusView = findViewById(R.id.statusText)
         statusView.movementMethod = ScrollingMovementMethod()
+        captureView = findViewById(R.id.captureText)
+        captureView.movementMethod = ScrollingMovementMethod()
 
         findViewById<Button>(R.id.btnOpenListenerSettings).setOnClickListener {
             // Open notification listener settings
@@ -85,6 +88,7 @@ class NotificationStatusActivity : AppCompatActivity() {
 
     private fun refreshStatus() {
         statusView.text = "" // Clear before refresh
+        captureView.text = ""
         try {
             val nm = getSystemService(NotificationManager::class.java)
             val enabled = NotificationManagerCompat.from(this).areNotificationsEnabled()
@@ -118,8 +122,11 @@ class NotificationStatusActivity : AppCompatActivity() {
                 }
             }
             val recent = NotificationCache.snapshot(this)
-            appendLine("\n--- 最近捕获的通知 (数量: ${recent.size}) ---")
-            recent.take(50).forEach { appendLine(it) }
+            appendCaptureLine("最近20条，数量: ${recent.size}")
+            recent.take(20).forEachIndexed { index, entry ->
+                if (index > 0) appendCaptureLine("")
+                appendCaptureLine(entry)
+            }
         } catch (e: Exception) {
             appendLine("failed to refresh status: ${e.message}")
         }
@@ -128,6 +135,11 @@ class NotificationStatusActivity : AppCompatActivity() {
     private fun appendLine(s: String) {
         statusView.append(s)
         statusView.append("\n")
+    }
+
+    private fun appendCaptureLine(s: String) {
+        captureView.append(s)
+        captureView.append("\n")
     }
 
     private fun isNotificationListenerEnabled(): Boolean {

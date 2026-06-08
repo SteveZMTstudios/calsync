@@ -18,8 +18,8 @@ android {
         applicationId = "top.stevezmt.calsync"
         minSdk = 23
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.1.7"
+        versionCode = 14
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -125,6 +125,36 @@ android {
         includeInApk = false
         includeInBundle = false
     }
+}
+
+val fossNoInternetPermissionChecks = listOf("fossDebug", "fossRelease").map { variantName ->
+    val capitalizedVariant = variantName.replaceFirstChar { it.titlecase() }
+    tasks.register("verify${capitalizedVariant}NoInternetPermission") {
+        dependsOn("process${capitalizedVariant}ManifestForPackage")
+        doLast {
+            val manifestRoot = layout.buildDirectory
+                .dir("intermediates/packaged_manifests/$variantName/process${capitalizedVariant}ManifestForPackage")
+                .get()
+                .asFile
+            val manifests = manifestRoot.walkTopDown()
+                .filter { it.name == "AndroidManifest.xml" }
+                .toList()
+            check(manifests.isNotEmpty()) {
+                "No packaged manifests found for $variantName"
+            }
+
+            val offenders = manifests.filter { manifest ->
+                manifest.readText().contains("android.permission.INTERNET")
+            }
+            check(offenders.isEmpty()) {
+                "FOSS builds must not request android.permission.INTERNET: ${offenders.joinToString { it.path }}"
+            }
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn(fossNoInternetPermissionChecks)
 }
 
 dependencies {

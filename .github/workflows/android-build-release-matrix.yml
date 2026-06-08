@@ -112,7 +112,7 @@ jobs:
 
 #       - name: Init submodules (llama.cpp)
 #         run: |
-#           git submodule update --init --depth 1
+#           git submodule update --init
 
 #       - name: Set up JDK 21
 #         uses: actions/setup-java@v4

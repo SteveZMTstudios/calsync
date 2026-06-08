@@ -13,7 +13,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
+import com.google.android.material.timepicker.MaterialTimePicker
+import com.google.android.material.timepicker.TimeFormat
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -25,14 +30,10 @@ class SettingsActivity : AppCompatActivity() {
     private var radioDisable: android.widget.RadioButton? = null
     private lateinit var permBtn: Button
     private lateinit var notifyBtn: Button
-    private lateinit var relativeWordsEdit: EditText
-    private lateinit var customRulesEdit: EditText
     private lateinit var reminderMinutesEdit: EditText
     private var selectAppBtn: Button? = null
     private var selectAppsBtn: Button? = null
     private var selectedAppsText: android.widget.TextView? = null
-    private var fillRuleTemplateBtn: Button? = null
-    private var resetRelativeWordsBtn: Button? = null
 
     private var parseEngineInput: MaterialAutoCompleteTextView? = null
     private var eventEngineInput: MaterialAutoCompleteTextView? = null
@@ -40,7 +41,12 @@ class SettingsActivity : AppCompatActivity() {
     private var pickAiModelBtn: Button? = null
     private var aiPromptEdit: EditText? = null
     private var aiSection: android.view.View? = null
-    private var guessBeforeParseSwitch: com.google.android.material.materialswitch.MaterialSwitch? = null
+    private var queueModeInput: MaterialAutoCompleteTextView? = null
+    private var queueTimeoutEdit: EditText? = null
+    private var queueMaxMessagesEdit: EditText? = null
+    private var fuzzyPairsContainer: android.widget.LinearLayout? = null
+    private var addFuzzyPairBtn: MaterialButton? = null
+    private var resetFuzzyPairsBtn: MaterialButton? = null
     private var fabSave: com.google.android.material.floatingactionbutton.FloatingActionButton? = null
 
     private val pickAiModelLauncher = registerForActivityResult(
@@ -85,8 +91,6 @@ class SettingsActivity : AppCompatActivity() {
         saveBtn = findViewById(R.id.btn_save)
         permBtn = findViewById(R.id.btn_request_permission)
         notifyBtn = findViewById(R.id.btn_open_notification_access)
-        relativeWordsEdit = findViewById(R.id.edit_relative_words)
-        customRulesEdit = findViewById(R.id.edit_custom_rules)
         reminderMinutesEdit = findViewById(R.id.edit_reminder_minutes)
         // try to locate optional button id without crashing if it's absent in newer layouts
         // Use reflection to read the generated R.id.<name> field at runtime so we don't
@@ -102,8 +106,6 @@ class SettingsActivity : AppCompatActivity() {
         }
         selectAppsBtn = findViewById(R.id.btn_select_apps)
         selectedAppsText = findViewById(R.id.text_selected_apps)
-        fillRuleTemplateBtn = findViewById(R.id.btn_fill_rule_template)
-        resetRelativeWordsBtn = findViewById(R.id.btn_reset_relative_words)
 
         parseEngineInput = findViewById(R.id.input_parse_engine)
         eventEngineInput = findViewById(R.id.input_event_engine)
@@ -111,20 +113,24 @@ class SettingsActivity : AppCompatActivity() {
         pickAiModelBtn = findViewById(R.id.btn_pick_ai_model)
         aiPromptEdit = findViewById(R.id.edit_ai_prompt)
         aiSection = findViewById(R.id.ai_section)
-        guessBeforeParseSwitch = findViewById(R.id.switch_guess_before_parse)
+        queueModeInput = findViewById(R.id.input_notification_queue_mode)
+        queueTimeoutEdit = findViewById(R.id.edit_notification_queue_timeout)
+        queueMaxMessagesEdit = findViewById(R.id.edit_notification_queue_max_messages)
+        fuzzyPairsContainer = findViewById(R.id.container_fuzzy_time_pairs)
+        addFuzzyPairBtn = findViewById(R.id.btn_add_fuzzy_time_pair)
+        resetFuzzyPairsBtn = findViewById(R.id.btn_reset_fuzzy_time_pairs)
         fabSave = findViewById(R.id.fab_save)
 
         updateSelectedAppsSummary()
 
         keywordsEdit.setText(SettingsStore.getKeywords(this).joinToString(","))
-        relativeWordsEdit.setText(SettingsStore.getRelativeDateWords(this).joinToString(","))
-        customRulesEdit.setText(SettingsStore.getCustomRules(this).joinToString(","))
         reminderMinutesEdit.setText(SettingsStore.getReminderMinutes(this).toString())
         refreshPreferFutureSelection()
 
         setupParsingEngineUi()
         setupAiModelUi()
-        setupBatterySaverUi()
+        setupNotificationQueueUi()
+        setupFuzzyTimePairsUi()
 
         saveBtn.setOnClickListener {
             saveAllSettings()
@@ -167,21 +173,6 @@ class SettingsActivity : AppCompatActivity() {
 
         selectAppsBtn?.setOnClickListener {
             startActivity(Intent(this, AppPickerActivity::class.java))
-        }
-
-        fillRuleTemplateBtn?.setOnClickListener {
-            if (customRulesEdit.text.isNullOrBlank()) {
-                customRulesEdit.setText("(\\d{1,2}月\\d{1,2}日)|(周[一二三四五六日天]\\d{1,2}[:：]\\d{2})|(下周[一二三四五六日天]?)")
-                Toast.makeText(this, "已填入示例规则", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "已存在内容，未覆盖", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        resetRelativeWordsBtn?.setOnClickListener {
-            SettingsStore.resetRelativeWords(this)
-            relativeWordsEdit.setText(SettingsStore.getRelativeDateWords(this).joinToString(","))
-            Toast.makeText(this, "日期词已重置", Toast.LENGTH_SHORT).show()
         }
 
         pickAiModelBtn?.setOnClickListener {
@@ -390,14 +381,138 @@ class SettingsActivity : AppCompatActivity() {
         } catch (_: Throwable) {}
     }
 
-    private fun setupBatterySaverUi() {
+    private fun setupNotificationQueueUi() {
         try {
-            guessBeforeParseSwitch?.isChecked = SettingsStore.isGuessBeforeParseEnabled(this)
-            guessBeforeParseSwitch?.setOnCheckedChangeListener { _, isChecked ->
-                SettingsStore.setGuessBeforeParseEnabled(this, isChecked)
+            val modes = NotificationQueueMode.entries
+            val adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_list_item_1, modes)
+            queueModeInput?.setAdapter(adapter)
+            queueModeInput?.setText(SettingsStore.getNotificationQueueMode(this).displayName, false)
+            queueModeInput?.setOnItemClickListener { _, _, pos, _ ->
+                SettingsStore.setNotificationQueueMode(this, modes.getOrNull(pos) ?: NotificationQueueMode.OFF)
+            }
+            queueTimeoutEdit?.setText(SettingsStore.getNotificationQueueTimeoutSeconds(this).toString())
+            queueMaxMessagesEdit?.setText(SettingsStore.getNotificationQueueMaxMessages(this).toString())
+        } catch (_: Throwable) {}
+    }
+
+    private fun setupFuzzyTimePairsUi() {
+        try {
+            fuzzyPairsContainer?.removeAllViews()
+            SettingsStore.getFuzzyTimePairs(this).forEach { addFuzzyTimePairRow(it.word, it.minutesOfDay) }
+            addFuzzyPairBtn?.setOnClickListener {
+                addFuzzyTimePairRow("", 13 * 60)
+            }
+            resetFuzzyPairsBtn?.setOnClickListener {
+                SettingsStore.resetFuzzyTimePairs(this)
+                fuzzyPairsContainer?.removeAllViews()
+                SettingsStore.getFuzzyTimePairs(this).forEach { addFuzzyTimePairRow(it.word, it.minutesOfDay) }
+                Toast.makeText(this, "含糊时间词对已重置", Toast.LENGTH_SHORT).show()
             }
         } catch (_: Throwable) {}
     }
+
+    private fun addFuzzyTimePairRow(word: String, minutes: Int) {
+        val container = fuzzyPairsContainer ?: return
+        val row = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(8) }
+        }
+
+        val wordLayout = TextInputLayout(this).apply {
+            hint = "含糊词"
+            layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1.2f)
+        }
+        val wordEdit = TextInputEditText(wordLayout.context).apply {
+            setText(word)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            setSingleLine(true)
+        }
+        wordLayout.addView(wordEdit)
+
+        val spacer = android.widget.Space(this).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(dp(8), 1)
+        }
+
+        val timeLayout = TextInputLayout(this).apply {
+            hint = "默认时间"
+            endIconMode = TextInputLayout.END_ICON_CUSTOM
+            setEndIconDrawable(R.drawable.access_time_24)
+            setEndIconContentDescription("选择默认时间")
+            layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val timeInput = TextInputEditText(timeLayout.context).apply {
+            inputType = android.text.InputType.TYPE_NULL
+            isFocusable = false
+            isCursorVisible = false
+            setSingleLine(true)
+            setText(SettingsStore.formatMinutesOfDay(minutes))
+            setOnClickListener {
+                showFuzzyTimePicker(this)
+            }
+        }
+        timeLayout.addView(timeInput)
+        timeLayout.setEndIconOnClickListener {
+            showFuzzyTimePicker(timeInput)
+        }
+
+        val deleteButton = android.widget.ImageButton(this).apply {
+            setImageResource(R.drawable.delete_24)
+            background = null
+            contentDescription = "删除词对"
+            scaleType = android.widget.ImageView.ScaleType.CENTER
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                dp(48),
+                dp(48)
+            ).apply { leftMargin = dp(8) }
+            setOnClickListener { container.removeView(row) }
+        }
+
+        row.addView(wordLayout)
+        row.addView(spacer)
+        row.addView(timeLayout)
+        row.addView(deleteButton)
+        container.addView(row)
+    }
+
+    private fun readFuzzyTimePairsFromUi(): List<SettingsStore.FuzzyTimePair> {
+        val container = fuzzyPairsContainer ?: return emptyList()
+        val out = mutableListOf<SettingsStore.FuzzyTimePair>()
+        for (i in 0 until container.childCount) {
+            val row = container.getChildAt(i) as? android.widget.LinearLayout ?: continue
+            val wordLayout = row.getChildAt(0) as? TextInputLayout ?: continue
+            val timeLayout = row.getChildAt(2) as? TextInputLayout ?: continue
+            val word = wordLayout.editText?.text?.toString()?.trim().orEmpty()
+            val minutes = SettingsStore.parseTimeLabelToMinutes(timeLayout.editText?.text?.toString().orEmpty()) ?: continue
+            out += SettingsStore.FuzzyTimePair(word, minutes)
+        }
+        return out
+    }
+
+    private fun refreshFuzzyTimePairsUi() {
+        fuzzyPairsContainer?.removeAllViews()
+        SettingsStore.getFuzzyTimePairs(this).forEach { addFuzzyTimePairRow(it.word, it.minutesOfDay) }
+    }
+
+    private fun showFuzzyTimePicker(target: TextInputEditText) {
+        val currentMinutes = SettingsStore.parseTimeLabelToMinutes(target.text?.toString().orEmpty()) ?: 13 * 60
+        val picker = MaterialTimePicker.Builder()
+            .setTimeFormat(TimeFormat.CLOCK_24H)
+            .setHour(currentMinutes / 60)
+            .setMinute(currentMinutes % 60)
+            .setTitleText("选择默认时间")
+            .build()
+        picker.addOnPositiveButtonClickListener {
+            target.setText(SettingsStore.formatMinutesOfDay(picker.hour * 60 + picker.minute))
+        }
+        picker.show(supportFragmentManager, "fuzzy_time_picker_${System.identityHashCode(target)}")
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun syncUiForEngineCoupling() {
         val isAi = SettingsStore.getParsingEngine(this) == ParseEngine.AI_GGUF
@@ -412,13 +527,7 @@ class SettingsActivity : AppCompatActivity() {
         val kwList = rawK.split(',').map { it.trim() }.filter { it.isNotEmpty() }
         SettingsStore.setKeywords(this, kwList)
 
-        val rawR = relativeWordsEdit.text.toString()
-        val rwList = rawR.split(',').map { it.trim() }.filter { it.isNotEmpty() }
-        SettingsStore.setRelativeDateWords(this, rwList)
-
-        val rawCR = customRulesEdit.text.toString()
-        val crList = rawCR.split(',').map { it.trim() }.filter { it.isNotEmpty() }
-        SettingsStore.setCustomRules(this, crList)
+        SettingsStore.setFuzzyTimePairs(this, readFuzzyTimePairsFromUi())
 
         val reminderMins = reminderMinutesEdit.text.toString().toIntOrNull() ?: 10
         SettingsStore.setReminderMinutes(this, reminderMins)
@@ -448,9 +557,14 @@ class SettingsActivity : AppCompatActivity() {
             }
         } catch (_: Exception) {}
 
-        // save battery saver
+        // save notification queue settings
         try {
-            SettingsStore.setGuessBeforeParseEnabled(this, guessBeforeParseSwitch?.isChecked == true)
+            SettingsStore.setNotificationQueueMode(this, NotificationQueueMode.fromDisplayName(queueModeInput?.text?.toString()))
+            SettingsStore.setNotificationQueueTimeoutSeconds(this, queueTimeoutEdit?.text?.toString()?.toIntOrNull() ?: 40)
+            SettingsStore.setNotificationQueueMaxMessages(this, queueMaxMessagesEdit?.text?.toString()?.toIntOrNull() ?: 3)
+            queueTimeoutEdit?.setText(SettingsStore.getNotificationQueueTimeoutSeconds(this).toString())
+            queueMaxMessagesEdit?.setText(SettingsStore.getNotificationQueueMaxMessages(this).toString())
+            queueModeInput?.setText(SettingsStore.getNotificationQueueMode(this).displayName, false)
         } catch (_: Exception) {}
 
         // save AI prompt and model uri (model uri is typically saved on pick)
@@ -467,6 +581,7 @@ class SettingsActivity : AppCompatActivity() {
         try {
             parseEngineInput?.setText(SettingsStore.getParsingEngine(this).displayName, false)
             eventEngineInput?.setText(SettingsStore.getEventParsingEngine(this).displayName, false)
+            refreshFuzzyTimePairsUi()
             syncUiForEngineCoupling()
         } catch (_: Throwable) {}
 

@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 class NotificationMonitorService : NotificationListenerService() {
     private val TAG = "NotificationMonitor"
     private val scope = CoroutineScope(Dispatchers.Default)
+    private val queueCoordinator by lazy { NotificationQueueCoordinator(applicationContext, scope) }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
@@ -96,9 +97,14 @@ class NotificationMonitorService : NotificationListenerService() {
         try {
             Log.i(TAG, "onNotificationPosted -> pkg=${sbn.packageName} id=${sbn.id}")
             val pkg = sbn.packageName ?: return
+            if (pkg == applicationContext.packageName) {
+                Log.d(TAG, "skip self notification")
+                return
+            }
             val notification = sbn.notification ?: return
             val extras = notification.extras
             val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+            val conversationTitle = extras.getCharSequence("android.conversationTitle")?.toString()
             val primary = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
             val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
             val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
@@ -127,42 +133,43 @@ class NotificationMonitorService : NotificationListenerService() {
 
             scope.launch {
                 try {
-                    processNotification(pkg, title, content)
+                    val result = processNotification(
+                        pkg = pkg,
+                        title = title,
+                        content = content,
+                        notificationKey = sbn.key ?: "${pkg}:${sbn.id}:${sbn.tag.orEmpty()}",
+                        conversationTitle = conversationTitle,
+                        postTimeMillis = sbn.postTime
+                    )
+                    NotificationCache.add(applicationContext, formatNotificationDebugEntry(pkg, title, content, result))
                 } catch (e: Exception) {
                     Log.e(TAG, "processNotification failed", e)
+                    NotificationCache.add(
+                        applicationContext,
+                        formatNotificationDebugEntry(pkg, title, content, "处理异常: ${e.message ?: e::class.java.simpleName}")
+                    )
                     sendErrorNotification("处理通知失败: ${e.message}")
                 }
             }
-            // add to recent notifications cache
-            try {
-                val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
-                val summary = "[$ts] $pkg - ${title.ifBlank { content.take(40) }}"
-                NotificationCache.add(applicationContext, summary)
-            } catch (_: Throwable) {}
         } catch (e: Exception) {
             Log.e(TAG, "Failed to handle notification", e)
             sendErrorNotification("通知处理失败: ${e.message}")
         }
     }
 
-    private fun processNotification(pkg: String, title: String, content: String) {
-        val res = NotificationProcessor.process(applicationContext, NotificationProcessor.ProcessInput(pkg, title, content), object: NotificationProcessor.ConfirmationNotifier{
-            override fun onEventCreated(eventId: Long, title: String, startMillis: Long, endMillis: Long, location: String?) {
-                // Do not post the extra "已添加...日程" confirmation notification here.
-                // The event-created notification is already posted by NotificationProcessor -> NotificationUtils.sendEventCreated.
+    private fun processNotification(pkg: String, title: String, content: String, notificationKey: String, conversationTitle: String?, postTimeMillis: Long): NotificationQueueCoordinator.HandleResult {
+        val notifier = object: NotificationProcessor.ConfirmationNotifier{
+            override fun onCandidateEvent(title: String, startMillis: Long, endMillis: Long?, location: String?, sourceSentence: String, engineLabel: String) {
                 try {
-                    // also log created events into NotificationCache and broadcast to UI
-                    val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
-                    val entry = "[$ts] event_created id=$eventId title=$title start=${startMillis}"
-                    NotificationCache.add(applicationContext, entry)
-                    try {
-                        val b = Intent(NotificationUtils.ACTION_EVENT_CREATED)
-                        b.setPackage(applicationContext.packageName)
-                        b.putExtra(NotificationUtils.EXTRA_EVENT_ID, eventId)
-                        b.putExtra(NotificationUtils.EXTRA_EVENT_TITLE, title)
-                        b.putExtra(NotificationUtils.EXTRA_EVENT_START, startMillis)
-                        sendBroadcast(b)
-                    } catch (_: Throwable) {}
+                    ResultLogCache.add(applicationContext, formatCandidateResult(title, startMillis, endMillis, location, engineLabel))
+                } catch (_: Throwable) {}
+            }
+
+            override fun onEventCreated(eventId: Long, title: String, startMillis: Long, endMillis: Long, location: String?, engineLabel: String) {
+                // Do not post the extra "已添加...日程" confirmation notification here.
+                // NotificationProcessor already posts the user notification and broadcasts the live UI update.
+                try {
+                    ResultLogCache.add(applicationContext, formatSavedResult(eventId, title, startMillis, endMillis, location, engineLabel))
                 } catch (_: Throwable) {}
             }
             override fun onError(message: String?) {
@@ -172,8 +179,72 @@ class NotificationMonitorService : NotificationListenerService() {
                 // Do not include full notification content; keep it concise.
                 try { NotificationUtils.sendDebugLog(applicationContext, "[notif] $line") } catch (_: Throwable) {}
             }
-        })
-        Log.d(TAG, "process result: $res")
+            override fun onInfoLog(line: String) {
+                try { ResultLogCache.add(applicationContext, line) } catch (_: Throwable) {}
+            }
+        }
+        val mode = SettingsStore.getNotificationQueueMode(applicationContext)
+        val result = queueCoordinator.handle(
+            NotificationQueueCoordinator.IncomingNotification(
+                packageName = pkg,
+                title = title,
+                content = content,
+                notificationKey = notificationKey,
+                conversationTitle = conversationTitle,
+                postTimeMillis = postTimeMillis
+            ),
+            mode,
+            notifier
+        )
+        Log.d(TAG, "process result: $result")
+        return result
+    }
+
+    // Formats a parsed candidate before insertion so users can see what the app found.
+    private fun formatCandidateResult(title: String, startMillis: Long, endMillis: Long?, location: String?, engineLabel: String): String {
+        val endText = endMillis?.let { " - ${formatResultTime(it)}" } ?: ""
+        val locationText = if (!location.isNullOrBlank()) "\n地点: $location" else ""
+        return "发现可能日程: $title\n引擎: $engineLabel\n时间: ${formatResultTime(startMillis)}$endText$locationText"
+    }
+
+    // Formats the durable calendar outcome shown on the main screen history.
+    private fun formatSavedResult(eventId: Long, title: String, startMillis: Long, endMillis: Long, location: String?, engineLabel: String): String {
+        val locationText = if (!location.isNullOrBlank()) "\n地点: $location" else ""
+        return "已保存日历: $title\n事件ID: $eventId\n引擎: $engineLabel\n时间: ${formatResultTime(startMillis)} - ${formatResultTime(endMillis)}$locationText"
+    }
+
+    private fun formatResultTime(millis: Long): String {
+        return java.text.SimpleDateFormat("M月d日 H:mm", java.util.Locale.getDefault()).format(java.util.Date(millis))
+    }
+
+    private fun formatNotificationDebugEntry(
+        pkg: String,
+        title: String,
+        content: String,
+        result: NotificationQueueCoordinator.HandleResult
+    ): String {
+        val status = when (result) {
+            is NotificationQueueCoordinator.HandleResult.Processed -> {
+                val outcome = result.result.outcome
+                val reason = result.result.reason?.let { ": $it" }.orEmpty()
+                "已处理($outcome)$reason"
+            }
+            is NotificationQueueCoordinator.HandleResult.Queued -> "已入队: ${result.groupKey} (${result.size}条)"
+            is NotificationQueueCoordinator.HandleResult.Dropped -> "已丢弃: ${result.reason}"
+        }
+        return formatNotificationDebugEntry(pkg, title, content, status)
+    }
+
+    private fun formatNotificationDebugEntry(
+        pkg: String,
+        title: String,
+        content: String,
+        status: String
+    ): String {
+        val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+        val safeTitle = title.ifBlank { "(空)" }
+        val safeContent = content.ifBlank { "(空)" }
+        return "[$ts] $pkg\n状态: $status\n标题: $safeTitle\n正文:\n$safeContent"
     }
 
     // Note: confirmation notifications are posted by NotificationUtils.sendEventCreated from the processor.

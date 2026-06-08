@@ -25,6 +25,10 @@ object DateTimeParser {
     }
 
     data class ParseResult(val startMillis: Long, val endMillis: Long?, val title: String? = null, val location: String? = null)
+    data class EngineParseResult(val result: ParseResult, val requestedEngine: ParseEngine, val actualEngineName: String) {
+        val engineLabel: String
+            get() = if (requestedEngine.displayName == actualEngineName) actualEngineName else "${requestedEngine.displayName} -> $actualEngineName"
+    }
 
     @JvmStatic
     fun extractTitleAndLocationFromText(context: android.content.Context, text: String): Pair<String?, String?> = extractTitleAndLocation(context, text)
@@ -32,13 +36,15 @@ object DateTimeParser {
     // Patterns for Chinese-style dates/times. These are examples and should be extended.
     // Accept both ASCII colon and fullwidth colon
     private const val colon = "[:：]"
-    private val monthDayPattern = Pattern.compile("(\\d{1,2}|[一二三四五六七八九十百]+)月(\\d{1,2}|[一二三四五六七八九十]+)[日号]?")
+    private const val chineseNumberChars = "零一二三四五六七八九十百两"
+    private val monthDayPattern = Pattern.compile("(\\d{1,2}|[$chineseNumberChars]+)月(\\d{1,2}|[$chineseNumberChars]+)[日号]?")
     // Require end part to have '日/号' and not be followed by letter to avoid matching like '到21B6教室'
-    private val monthDayRangePattern = Pattern.compile("(\\d{1,2}|[一二三四五六七八九十百]+)月(\\d{1,2}|[一二三四五六七八九十]+)[日号]?\\s*[~-至到]+\\s*(\\d{1,2}|[一二三四五六七八九十百]+)月?(\\d{1,2}|[一二三四五六七八九十]+)[日号](?![A-Za-z])")
+    private val monthDayRangePattern = Pattern.compile("(\\d{1,2}|[$chineseNumberChars]+)月(\\d{1,2}|[$chineseNumberChars]+)[日号]?\\s*[~-至到]+\\s*(\\d{1,2}|[$chineseNumberChars]+)月?(\\d{1,2}|[$chineseNumberChars]+)[日号](?![A-Za-z])")
     // unified time pattern: optional am/pm token, hour (arabic or chinese numerals), optional minute
     // Added 今晚 / 明晚 to capture evening context directly so "今晚8点" 不再被误判为上午 8 点
-    private val timePattern = Pattern.compile("(上午|下午|中午|晚上|凌晨|今晚|明晚)?\\s*([0-9]{1,2}|[一二三四五六七八九十百]+)(?:${colon}([0-5]?\\d))?点?")
+    private val timePattern = Pattern.compile("(上午|下午|中午|晚上|凌晨|今晚|明晚)?\\s*([0-9]{1,2}|[$chineseNumberChars]+)(?:${colon}([0-5]?\\d))?点?(半)?")
     private val weekdayTimePattern = Pattern.compile("((?:周|星期)[一二三四五六日天])(?:[上下午]|上午|下午)?\\s*(\\d{1,2})${colon}(\\d{1,2})")
+    private val looseWeekdayPattern = Pattern.compile("(周|星期)([一二三四五六日天])")
 
     // Extract ALL sentences (segments bounded by punctuation) that contain date/time-like info
     fun extractAllSentencesContainingDate(context: android.content.Context, text: String): List<String> {
@@ -67,15 +73,7 @@ object DateTimeParser {
     }
 
     private fun containsDateLike(context: android.content.Context, s: String): Boolean {
-        // check custom rules first
-        val custom = SettingsStore.getCustomRules(context)
-        for (rule in custom) {
-            try {
-                val p = Pattern.compile(rule)
-                if (p.matcher(s).find()) return true
-            } catch (_: Exception) {
-            }
-        }
+        if (FuzzyTimeInjector.canInject(context, s)) return true
         // Countdown style (超星): 还有X天 / 还有X个小时 / 还有X分钟 / 还有X分 / 还有X秒
         if (Regex("还有[一二三四五六七八九十百零0-9]+(个)?天").containsMatchIn(s)
             || Regex("还有[一二三四五六七八九十百零0-9]+(个)?小时").containsMatchIn(s)
@@ -96,7 +94,7 @@ object DateTimeParser {
             val hourStr = tm.group(2)
             val minuteStr = tm.group(3)
             val hour = hourStr?.let { if (it.matches(Regex("\\d+"))) it.toInt() else toArabic(it) } ?: -1
-            val hasIndicator = ampm != null || minuteStr != null || matched.contains("点") || matched.contains(":") || matched.contains("：")
+            val hasIndicator = ampm != null || minuteStr != null || matched.contains("点") || matched.contains(":") || matched.contains("：") || matched.contains("半")
             // Guard: avoid matching inside longer numbers like "下午104" (treat as '10' followed by '4')
             val hourEnd = try { tm.end(2) } catch (_: Throwable) { -1 }
             val nextCh = if (hourEnd in 0 until s.length) s[hourEnd] else null
@@ -109,12 +107,29 @@ object DateTimeParser {
     // === Public APIs (unchanged signature) ===
     fun parseDateTime(sentence: String): ParseResult? = RuleBasedStrategy.tryParseStandalone(sentence)
 
-    // Overload: allow passing a fixed baseMillis so all calculations in this call share the same "now"
+    // Overload: allow passing a fixed baseMillis so all calculations in this call share the same "now".
     fun parseDateTime(context: android.content.Context, sentence: String, baseMillis: Long): ParseResult? {
-        when (SettingsStore.getParsingEngine(context)) {
+        return parseDateTimeWithEngine(context, sentence, baseMillis)?.result
+    }
+
+    // Reports both the configured parser and the parser that actually produced the result after fallback.
+    fun parseDateTimeWithEngine(context: android.content.Context, sentence: String, baseMillis: Long): EngineParseResult? {
+        val requestedEngine = SettingsStore.getParsingEngine(context)
+        fun tryBuiltIn(): ParseResult? {
+            return try {
+                RuleBasedStrategyWithContext(context).tryParseWithBase(sentence, baseMillis)
+            } catch (e: Exception) {
+                Log.w(TAG, "RuleBaseCtx(withBase) failed: ${e.message}")
+                try { NotificationUtils.sendError(context, e) } catch (_: Throwable) {}
+                null
+            }
+        }
+        when (requestedEngine) {
             ParseEngine.XK_TIME -> {
                 try {
-                    XkTimeStrategy(context).tryParseWithBase(sentence, baseMillis)?.let { return it }
+                    XkTimeStrategy(context).tryParseWithBase(sentence, baseMillis)?.let {
+                        return EngineParseResult(it, requestedEngine, ParseEngine.XK_TIME.displayName)
+                    }
                 } catch (t: Throwable) {
                     // xk-time (3rd party) may throw Error (e.g., NoClassDefFoundError on some devices).
                     Log.w(TAG, "xk-time crashed: ${t.message}")
@@ -122,24 +137,26 @@ object DateTimeParser {
                 }
             }
             ParseEngine.AI_GGUF -> {
-                AiGgufStrategy(context).tryParseWithBase(sentence, baseMillis)?.let { return it }
+                AiGgufStrategy(context).tryParseWithBase(sentence, baseMillis)?.let {
+                    return EngineParseResult(it, requestedEngine, ParseEngine.AI_GGUF.displayName)
+                }
             }
             ParseEngine.ML_KIT -> {
-                MLKitStrategy(context).tryParseWithBase(sentence, baseMillis)?.let { return it }
+                // Deterministic Chinese weekday/time expressions are more reliable in the rule engine
+                // than ML Kit, which can return midnight for "下午四点" on some devices.
+                if (containsExplicitChineseWeekdayTime(sentence)) {
+                    tryBuiltIn()?.let { return EngineParseResult(it, requestedEngine, ParseEngine.BUILTIN.displayName) }
+                }
+                MLKitStrategy(context).tryParseWithBase(sentence, baseMillis)?.takeUnless { isSuspiciousMlKitMidnight(sentence, it) }?.let {
+                    return EngineParseResult(it, requestedEngine, ParseEngine.ML_KIT.displayName)
+                }
             }
             ParseEngine.BUILTIN -> {
                 // fall through to built-in pipeline below
             }
         }
         // Prefer explicit rule-based parsing first (handles tokens like 周五/本周五 reliably).
-        try {
-            val rule = RuleBasedStrategyWithContext(context)
-            val r = rule.tryParseWithBase(sentence, baseMillis)
-            if (r != null) return r
-        } catch (e: Exception) {
-            Log.w(TAG, "RuleBaseCtx(withBase) failed: ${e.message}")
-            try { NotificationUtils.sendError(context, e) } catch (_: Throwable) {}
-        }
+        tryBuiltIn()?.let { return EngineParseResult(it, requestedEngine, ParseEngine.BUILTIN.displayName) }
 
         // Fallback to TimeNLP only if enabled and rule-based didn't match
         if (SettingsStore.isTimeNLPEnabled(context)) {
@@ -148,7 +165,7 @@ object DateTimeParser {
             try {
                 val nlp = TimeNLPStrategy(context)
                 val r2 = nlp.tryParseWithBase(sentence, baseMillis)
-                if (r2 != null) return r2
+                if (r2 != null) return EngineParseResult(r2, requestedEngine, "TimeNLP")
             } catch (e: Exception) {
                 Log.w(TAG, "TimeNLP(withBase) failed: ${e.message}")
                 try { NotificationUtils.sendError(context, e) } catch (_: Throwable) {}
@@ -158,6 +175,26 @@ object DateTimeParser {
     }
 
     // === Strategy implementations ===
+
+    private fun containsExplicitChineseWeekdayTime(sentence: String): Boolean {
+        if (!looseWeekdayPattern.matcher(sentence).find()) return false
+        val m = timePattern.matcher(sentence)
+        while (m.find()) {
+            val matched = m.group()
+            val ampm = m.group(1)
+            val minStr = m.group(3)
+            val hour = m.group(2)?.let { if (it.matches(Regex("\\d+"))) it.toInt() else toArabic(it) } ?: continue
+            val hasIndicator = ampm != null || minStr != null || matched.contains("点") || matched.contains(":") || matched.contains("：") || matched.contains("半")
+            if (hasIndicator && hour in 0..23) return true
+        }
+        return false
+    }
+
+    private fun isSuspiciousMlKitMidnight(sentence: String, result: ParseResult): Boolean {
+        if (!containsExplicitChineseWeekdayTime(sentence)) return false
+        val cal = Calendar.getInstance().apply { timeInMillis = result.startMillis }
+        return cal.get(Calendar.HOUR_OF_DAY) == 0 && cal.get(Calendar.MINUTE) == 0
+    }
 
     // TimeNLP-based strategy
     private class TimeNLPStrategy(private val context: android.content.Context): ParsingStrategy {
@@ -406,39 +443,16 @@ object DateTimeParser {
     private data class RelativeSpec(val offsetDays: Int, val ampm: String?)
 
     private fun buildRelativeTokenMap(context: android.content.Context): LinkedHashMap<String, RelativeSpec> {
-        // User now inputs tokens in a structured string list in Settings (we still store plain list for compatibility)
-        // Expected format each item: token[:offset[:ampm]] or JSON-like ["今晚":0,pm]; but to keep backward compat we parse heuristically.
-        val rawList = SettingsStore.getRelativeDateWords(context)
         val map = linkedMapOf<String, RelativeSpec>()
-        for (raw in rawList.sortedByDescending { it.length }) { // prefer longer first
-            val cleaned = raw.trim().trim('[',']',';')
-            // patterns: "今晚":0,pm or 今晚:0:pm or 今晚:0 or 今晚
-            val colonSplit = cleaned.split(':')
-            var token = cleaned
-            var offset = 0
-            var ampm: String? = null
-            try {
-                if (colonSplit.isNotEmpty()) token = colonSplit[0].substringAfter('"').substringBeforeLast('"').ifBlank { colonSplit[0] }
-                if (colonSplit.size >= 2) offset = colonSplit[1].split(',')[0].filter { it.isDigit() || it == '-' }.toIntOrNull() ?: 0
-                // find am/pm marker (am/pm) after comma or third part
-                if (colonSplit.size >= 3) {
-                    ampm = colonSplit[2].lowercase().takeIf { it == "am" || it == "pm" }
-                } else if (cleaned.contains(",pm", true)) ampm = "pm" else if (cleaned.contains(",am", true)) ampm = "am"
-            } catch (_: Exception) {}
-            if (token.isNotBlank()) map[token] = RelativeSpec(offset, ampm)
-        }
-        // defaults if user list empty
-        if (map.isEmpty()) {
-            map["今天"] = RelativeSpec(0,null)
-            map["今晚"] = RelativeSpec(0,"pm")
-            map["明天"] = RelativeSpec(1,null)
-            map["明晚"] = RelativeSpec(1,"pm")
-            map["后天"] = RelativeSpec(2,null)
-            map["大后天"] = RelativeSpec(3,null)
-            map["明早"] = RelativeSpec(1,"am")
-            map["明晨"] = RelativeSpec(1,"am")
-            map["明午"] = RelativeSpec(1,"pm")
-        }
+        map["今天"] = RelativeSpec(0,null)
+        map["今晚"] = RelativeSpec(0,"pm")
+        map["明天"] = RelativeSpec(1,null)
+        map["明晚"] = RelativeSpec(1,"pm")
+        map["后天"] = RelativeSpec(2,null)
+        map["大后天"] = RelativeSpec(3,null)
+        map["明早"] = RelativeSpec(1,"am")
+        map["明晨"] = RelativeSpec(1,"am")
+        map["明午"] = RelativeSpec(1,"pm")
         return map
     }
 
@@ -478,22 +492,23 @@ object DateTimeParser {
             val now = newCal(baseMillis)
             // -1) Deadline style: "截止到/截至(到) 10月27日( HH:mm)?" -> end at that time (default 23:59), start = end - 30min
             run {
-                val deadRe = Regex("(截止(?:到)?|截至(?:到)?)\\s*(?:于)?\\s*(\\d{1,2}|[一二三四五六七八九十百]+)月(\\d{1,2}|[一二三四五六七八九十]+)[日号]?(?:\\s*(上午|下午|中午|晚上|凌晨)?\\s*([0-2]?\\d)(?:$colon([0-5]?\\d))?)?")
+                val deadRe = Regex("(截止(?:到)?|截至(?:到)?)\\s*(?:于)?\\s*(\\d{1,2}|[$chineseNumberChars]+)月(\\d{1,2}|[$chineseNumberChars]+)[日号]?(?:\\s*(上午|下午|中午|晚上|凌晨)?\\s*([0-2]?\\d|[$chineseNumberChars]+)(?:$colon([0-5]?\\d))?点?(半)?)?")
                 val dm = deadRe.find(sentence)
                 if (dm != null) {
                     val mo = toArabic(dm.groupValues[2])
                     val dd = toArabic(dm.groupValues[3])
-                    val ampm = dm.groupValues.getOrNull(332)?.ifBlank { null }
+                    val ampm = dm.groupValues.getOrNull(4)?.ifBlank { null }
                     val hhStr = dm.groupValues.getOrNull(5)?.ifBlank { null }
                     val mmStr = dm.groupValues.getOrNull(6)?.ifBlank { null }
+                    val half = dm.groupValues.getOrNull(7) == "半"
                     val endCal = newCal(baseMillis)
                     endCal.set(Calendar.MONTH, mo - 1)
                     endCal.set(Calendar.DAY_OF_MONTH, dd)
                     if (hhStr != null) {
-                        val hh = hhStr.toIntOrNull() ?: 0
+                        val hh = hhStr.toIntOrNull() ?: toArabic(hhStr)
                         val adj = adjustHourByAmPm(hh, ampm)
                         endCal.set(Calendar.HOUR_OF_DAY, adj)
-                        endCal.set(Calendar.MINUTE, mmStr?.toIntOrNull() ?: 0)
+                        endCal.set(Calendar.MINUTE, mmStr?.toIntOrNull() ?: if (half) 30 else 0)
                     } else {
                         // no time -> default to 23:59
                         endCal.set(Calendar.HOUR_OF_DAY, 23)
@@ -618,7 +633,7 @@ object DateTimeParser {
 
             // 0.5) 截止到/至 XX-月-日( 时间)? -> 采用当天 23:59（若无时间），作为 end；start 取 end - 1h
             run {
-                val deadlineRe = Regex("截止(?:到|至)\\s*(?:(\\d{4})年)?\\s*(\\d{1,2}|[一二三四五六七八九十百]+)月(\\d{1,2}|[一二三四五六七八九十]+)[日号]?\\s*(?:(上午|下午|中午|晚上|凌晨)?\\s*([0-9]{1,2})(?:$colon([0-5]?\\d))?点?)?")
+                val deadlineRe = Regex("截止(?:到|至)\\s*(?:(\\d{4})年)?\\s*(\\d{1,2}|[$chineseNumberChars]+)月(\\d{1,2}|[$chineseNumberChars]+)[日号]?\\s*(?:(上午|下午|中午|晚上|凌晨)?\\s*([0-9]{1,2}|[$chineseNumberChars]+)(?:$colon([0-5]?\\d))?点?(半)?)?")
                 val m = deadlineRe.find(sentence)
                 if (m != null) {
                     val yearStr = m.groupValues.getOrNull(1)
@@ -634,7 +649,7 @@ object DateTimeParser {
                     cal.set(Calendar.DAY_OF_MONTH, toArabic(dStr))
                     if (!hStr.isNullOrBlank()) {
                         val h = hStr.toIntOrNull() ?: toArabic(hStr)
-                        val minute = minStr?.toIntOrNull() ?: 0
+                        val minute = minStr?.toIntOrNull() ?: if (m.groupValues.getOrNull(7) == "半") 30 else 0
                         cal.set(Calendar.HOUR_OF_DAY, adjustHourByAmPm(h, ampm))
                         cal.set(Calendar.MINUTE, minute)
                         cal.set(Calendar.SECOND, 0)
@@ -683,14 +698,14 @@ object DateTimeParser {
                             val ampm = timeM.group(1)
                             val hourStr = timeM.group(2)
                             val minStr = timeM.group(3)
-                            val hasIndicator = ampm != null || minStr != null || matched.contains("点") || matched.contains(":") || matched.contains("：")
+                            val hasIndicator = ampm != null || minStr != null || matched.contains("点") || matched.contains(":") || matched.contains("：") || matched.contains("半")
                             val hour = hourStr?.let { if (it.matches(Regex("\\d+"))) it.toInt() else toArabic(it) } ?: continue
                             val hourEnd = try { timeM.end(2) } catch (_: Throwable) { -1 }
                             val nextCh = if (hourEnd in 0 until sentence.length) sentence[hourEnd] else null
                             val followedByDigitWithoutDelimiter = nextCh?.isDigit() == true && !matched.contains(":") && !matched.contains("：") && !matched.contains("点")
                             if (!hasIndicator || hour !in 0..23 || followedByDigitWithoutDelimiter) continue
                             chosenHour = adjustHourByAmPm(hour, ampm)
-                            chosenMinute = minStr?.toIntOrNull() ?: 0
+                            chosenMinute = minuteFromTimeMatch(timeM)
                             if (ampm != null || minStr != null || matched.contains(":") || matched.contains("：")) break
                         }
                         if (chosenHour != null) {
@@ -763,14 +778,14 @@ object DateTimeParser {
                         val ampm = timeM.group(1)
                         val hourStr = timeM.group(2)
                         val minStr = timeM.group(3)
-                        val hasIndicator = ampm != null || minStr != null || matched.contains("点") || matched.contains(":") || matched.contains("：")
+                        val hasIndicator = ampm != null || minStr != null || matched.contains("点") || matched.contains(":") || matched.contains("：") || matched.contains("半")
                         val hour = hourStr?.let { if (it.matches(Regex("\\d+"))) it.toInt() else toArabic(it) } ?: continue
                         val hourEnd = try { timeM.end(2) } catch (_: Throwable) { -1 }
                         val nextCh = if (hourEnd in 0 until sentence.length) sentence[hourEnd] else null
                         val followedByDigitWithoutDelimiter = nextCh?.isDigit() == true && !matched.contains(":") && !matched.contains("：") && !matched.contains("点")
                         if (!hasIndicator || hour !in 0..23 || followedByDigitWithoutDelimiter) continue
                         chosenHour = adjustHourByAmPm(hour, ampm)
-                        chosenMinute = minStr?.toIntOrNull() ?: 0
+                        chosenMinute = minuteFromTimeMatch(timeM)
                         // prefer the first strong indicator (with minutes or am/pm)
                         if (ampm != null || minStr != null || matched.contains(":") || matched.contains("：")) break
                     }
@@ -820,6 +835,35 @@ object DateTimeParser {
                 }
             }
 
+            // 3.5) Bare weekday + natural Chinese time, e.g. "周三下午两点半参加宣讲会".
+            run {
+                val looseWeekday = looseWeekdayPattern.matcher(sentence)
+                if (looseWeekday.find()) {
+                    val dayOfWeek = parseWeekday(looseWeekday.group())
+                    val timeM = timePattern.matcher(sentence)
+                    while (dayOfWeek != null && timeM.find()) {
+                        val matched = timeM.group()
+                        val ampm = timeM.group(1)
+                        val hourStr = timeM.group(2)
+                        val minStr = timeM.group(3)
+                        val hasIndicator = ampm != null || minStr != null || matched.contains("点") || matched.contains(":") || matched.contains("：") || matched.contains("半")
+                        val hour = hourStr?.let { if (it.matches(Regex("\\d+"))) it.toInt() else toArabic(it) } ?: continue
+                        val hourEnd = try { timeM.end(2) } catch (_: Throwable) { -1 }
+                        val nextCh = if (hourEnd in 0 until sentence.length) sentence[hourEnd] else null
+                        val followedByDigitWithoutDelimiter = nextCh?.isDigit() == true && !matched.contains(":") && !matched.contains("：") && !matched.contains("点")
+                        if (!hasIndicator || hour !in 0..23 || followedByDigitWithoutDelimiter) continue
+                        val next = nextWeekdayInCalendar(dayOfWeek, baseMillis)
+                        next.set(Calendar.HOUR_OF_DAY, adjustHourByAmPm(hour, ampm))
+                        next.set(Calendar.MINUTE, minuteFromTimeMatch(timeM))
+                        next.set(Calendar.SECOND, 0)
+                        val start = next.timeInMillis
+                        val (t, loc) = extractTitleAndLocation(ctx, sentence)
+                        Log.d(TAG, "bare weekday matched: start=${Date(start)}")
+                        return ParseResult(start, start + 60 * 60 * 1000L, t, loc)
+                    }
+                }
+            }
+
             // 4) time only — scan for first valid time (must have indicator and valid hour)
             val skipTimeOnly = containsWeekScopedHint(sentence)
             if (!skipTimeOnly) {
@@ -829,14 +873,14 @@ object DateTimeParser {
                     val ampm = timeOnlyM.group(1)
                     val hourStr = timeOnlyM.group(2)
                     val minStr = timeOnlyM.group(3)
-                    val hasIndicator = ampm != null || minStr != null || matched.contains("点") || matched.contains(":") || matched.contains("：")
+                    val hasIndicator = ampm != null || minStr != null || matched.contains("点") || matched.contains(":") || matched.contains("：") || matched.contains("半")
                     val hour = hourStr?.let { if (it.matches(Regex("\\d+"))) it.toInt() else toArabic(it) } ?: continue
                     // Guard against partial numeric like "下午104" -> skip if hour directly followed by another digit and no delimiter
                     val hourEnd = try { timeOnlyM.end(2) } catch (_: Throwable) { -1 }
                     val nextCh = if (hourEnd in 0 until sentence.length) sentence[hourEnd] else null
                     val followedByDigitWithoutDelimiter = nextCh?.isDigit() == true && !matched.contains(":") && !matched.contains("：") && !matched.contains("点")
                     if (!hasIndicator || hour !in 0..23 || followedByDigitWithoutDelimiter) continue
-                    val minute = minStr?.toIntOrNull() ?: 0
+                    val minute = minuteFromTimeMatch(timeOnlyM)
                     val cal = newCal(baseMillis)
                     val dayOffset = resolveRelativeDayOffset(relativeMap, sentence)
                     if (dayOffset != 0) cal.add(Calendar.DAY_OF_MONTH, dayOffset)
@@ -883,7 +927,7 @@ object DateTimeParser {
                             val ampm2 = t2.group(1)
                             val hourStr = t2.group(2)
                             val minStr = t2.group(3)
-                            val hasIndicator = ampm2 != null || minStr != null || matched.contains("点") || matched.contains(":") || matched.contains("：")
+                            val hasIndicator = ampm2 != null || minStr != null || matched.contains("点") || matched.contains(":") || matched.contains("：") || matched.contains("半")
                             val hCand = hourStr?.let { if (it.matches(Regex("\\d+"))) it.toInt() else toArabic(it) } ?: continue
                             // Guard: skip partial numeric matches like "下午104"
                             val hgEnd = try { t2.end(2) } catch (_: Throwable) { -1 }
@@ -891,7 +935,7 @@ object DateTimeParser {
                             val followedByDigitWithoutDelimiter = nextC?.isDigit() == true && !matched.contains(":") && !matched.contains("：") && !matched.contains("点")
                             if (!hasIndicator || hCand !in 0..23 || followedByDigitWithoutDelimiter) continue
                             explicitAmpm = ampm2
-                            minute = minStr?.toIntOrNull() ?: 0
+                            minute = minuteFromTimeMatch(t2)
                             hour = hCand
                             break
                         }
@@ -951,7 +995,7 @@ object DateTimeParser {
                             val minStr = tm.group(3)
                             val h = hourStr?.let { if (it.matches(Regex("\\d+"))) it.toInt() else toArabic(it) } ?: continue
                             chosenHour = h
-                            chosenMinute = minStr?.toIntOrNull() ?: 0
+                            chosenMinute = minuteFromTimeMatch(tm)
                             break
                         }
                         if (chosenHour != null) {
@@ -1010,7 +1054,7 @@ object DateTimeParser {
                 if (t2.find()) {
                     ampmToken = t2.group(1)
                     val hourStr = t2.group(2)
-                    minute = t2.group(3)?.toIntOrNull() ?: 0
+                    minute = minuteFromTimeMatch(t2)
                     hour = hourStr?.let { if (it.matches(Regex("\\d+"))) it.toInt() else toArabic(it) } ?: 9
                 }
                 val finalHour = adjustHourByAmPm(hour, ampmToken ?: if (sentence.contains("晚上")) "晚上" else if (sentence.contains("早")|| sentence.contains("上午")) "上午" else null)
@@ -1065,6 +1109,16 @@ object DateTimeParser {
         return 0
     }
 
+    private fun minuteFromTimeMatch(matcher: java.util.regex.Matcher): Int {
+        val explicitMinute = try { matcher.group(3)?.toIntOrNull() } catch (_: Throwable) { null }
+        if (explicitMinute != null) return explicitMinute
+        return try {
+            if (matcher.group(4) == "半") 30 else 0
+        } catch (_: Throwable) {
+            0
+        }
+    }
+
     // Strict check: does sentence contain a safe time token (with indicator and without trailing digits)?
     private fun hasSafeTimeToken(sentence: String): Boolean {
         val m = timePattern.matcher(sentence)
@@ -1073,7 +1127,7 @@ object DateTimeParser {
             val ampm = m.group(1)
             val hourStr = m.group(2)
             val minStr = m.group(3)
-            val hasIndicator = ampm != null || minStr != null || matched.contains("点") || matched.contains(":") || matched.contains("：")
+            val hasIndicator = ampm != null || minStr != null || matched.contains("点") || matched.contains(":") || matched.contains("：") || matched.contains("半")
             val hour = hourStr?.let { if (it.matches(Regex("\\d+"))) it.toInt() else toArabic(it) } ?: continue
             val hourEnd = try { m.end(2) } catch (_: Throwable) { -1 }
             val nextCh = if (hourEnd in 0 until sentence.length) sentence[hourEnd] else null
@@ -1181,7 +1235,7 @@ object DateTimeParser {
         } catch (_: Exception) {
         }
         // chinese numerals basic mapping for 0-99
-        val map = mapOf('零' to 0, '一' to 1, '二' to 2, '三' to 3, '四' to 4, '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9)
+        val map = mapOf('零' to 0, '一' to 1, '二' to 2, '两' to 2, '三' to 3, '四' to 4, '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9)
         var result = 0
         var temp = 0
         var lastUnit = 1
@@ -1242,7 +1296,7 @@ object DateTimeParser {
 
         // location patterns（在原文上）
         if (location == null) {
-            val locRegex = Regex("(?:地点|地址|场地|地点：|地点:|位置|集合地点)\\s*[:：]?\\s*([\\u4e00-\\u9fa5A-Za-z0-9\\-—–,，。、\\s]{2,60})")
+            val locRegex = Regex("(?:地点|地址|场地|地点：|地点:|位置|集合地点)\\s*(?:在|为|是|[:：])?\\s*([\\u4e00-\\u9fa5A-Za-z0-9\\-—–,，。、\\s]{2,60})")
             val locMatch = locRegex.find(sentence)
             if (locMatch != null) {
                 location = locMatch.groupValues.getOrNull(1)?.trim()?.trimEnd('。', '，', ',')
@@ -1445,7 +1499,7 @@ object DateTimeParser {
 
     private fun containsAnyDateTimeToken(s: String): Boolean {
         // fast-check tokens
-        if (Regex("(\\d{1,2}[:：][0-5]\\d|上午|下午|中午|晚上|凌晨|周[一二三四五六日天]|星期[一二三四五六日天]|[一二三四五六七八九十百]+月[一二三四五六七八九十]+(日|号)?)").containsMatchIn(s))
+        if (Regex("(\\d{1,2}[:：][0-5]\\d|上午|下午|中午|晚上|凌晨|周[一二三四五六日天]|星期[一二三四五六日天]|[$chineseNumberChars]+月[$chineseNumberChars]+(日|号)?)").containsMatchIn(s))
             return true
         // also our main patterns
         if (monthDayPattern.matcher(s).find()) return true
@@ -1458,7 +1512,7 @@ object DateTimeParser {
             val hourStr = tm.group(2)
             val minuteStr = tm.group(3)
             val hour = hourStr?.let { if (it.matches(Regex("\\d+"))) it.toInt() else toArabic(it) } ?: -1
-            val hasIndicator = ampm != null || minuteStr != null || matched.contains("点") || matched.contains(":") || matched.contains("：")
+            val hasIndicator = ampm != null || minuteStr != null || matched.contains("点") || matched.contains(":") || matched.contains("：") || matched.contains("半")
             if (hasIndicator && hour in 0..23) return true
         }
         return false
