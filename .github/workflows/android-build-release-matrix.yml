@@ -16,7 +16,9 @@ env:
  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 permissions:
+ id-token: write
  contents: write
+ attestations: write
 
 jobs:
   build-foss-split:
@@ -76,6 +78,7 @@ jobs:
             mkdir -p app/release
             echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$PWD/app/release/release-keystore.jks"
             chmod 600 "$PWD/app/release/release-keystore.jks"
+            echo "✅ Keystore ready."
           fi
 
       - name: Build FOSS ${{ matrix.abi }}
@@ -93,6 +96,11 @@ jobs:
           fi
 
           ./gradlew clean assembleFossRelease -PabiFilter=${{ matrix.abi }} $SIGNING_PROPS
+
+      - name: Generate Attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: 'app/build/outputs/apk/foss/release/*.apk'
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v5
@@ -171,6 +179,11 @@ jobs:
 #           fi
 
 #           ./gradlew clean assembleFossRelease $SIGNING_PROPS
+#
+#       - name: Generate Attestation
+#         uses: actions/attest@v4
+#         with:
+#           subject-path: 'app/build/outputs/apk/foss/release/*universal.apk'
 
 #       - name: Upload Artifact
 #         uses: actions/upload-artifact@v4
@@ -232,6 +245,7 @@ jobs:
             mkdir -p app/release
             echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$PWD/app/release/release-keystore.jks"
             chmod 600 "$PWD/app/release/release-keystore.jks"
+            echo "✅ Keystore ready."
           fi
 
       - name: Build Full Flavor
@@ -249,6 +263,11 @@ jobs:
           fi
 
           ./gradlew clean assembleFullRelease $SIGNING_PROPS
+
+      - name: Generate Attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: 'app/build/outputs/apk/full/release/*.apk'
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v5
@@ -331,3 +350,4 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release edit ${{ steps.meta.outputs.tag_name }} --draft=false
+
